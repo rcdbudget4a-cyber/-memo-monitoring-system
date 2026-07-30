@@ -1108,7 +1108,7 @@ body {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 0; /* Removes browser top date/title header and bottom URL/page number footers! */
+    margin: 8mm 10mm;
   }
 
   html, body {
@@ -1118,35 +1118,38 @@ body {
     color: #000000 !important;
   }
 
-  /* Hide all main page content and background elements from print engine */
-  body > *:not(#print-area) {
+  /* Hide all direct body children except #print-area */
+  body > * {
     display: none !important;
   }
 
-  #print-area, #print-area * {
-    visibility: visible !important;
-  }
-
-  #print-area {
+  /* Unhide ONLY #print-area for 1-page A4 printout */
+  body > #print-area {
     display: block !important;
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
-    box-sizing: border-box !important;
-    padding: 8mm 10mm !important; /* Inner margins for clean A4 printing */
+    height: auto !important;
     background: #ffffff !important;
     color: #000000 !important;
     font-family: Arial, sans-serif !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
   }
 
-  #print-area table {
+  #print-area * {
+    visibility: visible !important;
+  }
+
+  table {
     width: 100% !important;
     border-collapse: collapse !important;
     border: 2px solid #000 !important;
   }
 
-  #print-area th, #print-area td {
+  th, td {
     border: 1px solid #000 !important;
   }
 }
