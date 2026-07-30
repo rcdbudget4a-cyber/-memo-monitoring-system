@@ -50,29 +50,26 @@ class MemoMonitoringApp {
 
   loadMemos() {
     const defaultMemos = this.getInitialMemos();
-    const saved = localStorage.getItem("RCD_MEMO_MONITORING_DATA");
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem("RCD_MEMO_MONITORING_DATA");
+      if (saved) {
         const memos = JSON.parse(saved);
         if (Array.isArray(memos) && memos.length > 0) {
           return memos;
         }
-      } catch (e) {
-        console.error("Failed to parse saved memo data", e);
       }
-    }
-    if (defaultMemos.length > 0) {
-      try {
-        localStorage.setItem("RCD_MEMO_MONITORING_DATA", JSON.stringify(defaultMemos));
-      } catch (e) {
-        console.warn("LocalStorage space limit warning", e);
-      }
+    } catch (e) {
+      console.warn("LocalStorage access restricted in file:// origin or tracking prevention mode", e);
     }
     return defaultMemos;
   }
 
   saveMemos() {
-    localStorage.setItem("RCD_MEMO_MONITORING_DATA", JSON.stringify(this.memos));
+    try {
+      localStorage.setItem("RCD_MEMO_MONITORING_DATA", JSON.stringify(this.memos));
+    } catch (e) {
+      console.warn("LocalStorage save warning", e);
+    }
     this.populateOfficeFilter();
     this.renderStats();
     this.renderTable();
@@ -104,6 +101,9 @@ class MemoMonitoringApp {
     this.ocrModal = document.getElementById("ocr-modal");
     this.cameraModal = document.getElementById("camera-modal");
     this.routingModal = document.getElementById("routing-modal");
+    this.journalModal = document.getElementById("journal-modal");
+    this.journalPreviewModal = document.getElementById("journal-preview-modal");
+    this.journalSetupForm = document.getElementById("journal-setup-form");
 
     // Memo Form
     this.memoForm = document.getElementById("memo-form");
@@ -143,7 +143,11 @@ class MemoMonitoringApp {
     document.getElementById("btn-ocr-scan")?.addEventListener("click", () => this.openOcrModal());
     document.getElementById("btn-multi-camera")?.addEventListener("click", () => this.openCameraModal());
     document.getElementById("btn-export-excel")?.addEventListener("click", () => this.exportToExcel());
-    document.getElementById("btn-reset-data")?.addEventListener("click", () => this.resetData());
+    document.getElementById("btn-print-journal")?.addEventListener("click", () => this.openJournalModal());
+
+    if (this.journalSetupForm) {
+      this.journalSetupForm.addEventListener("submit", (e) => this.handleJournalSetupSubmit(e));
+    }
 
     // Backup & Restore DB Buttons
     const btnBackup = document.getElementById("btn-backup-db");
@@ -361,6 +365,7 @@ class MemoMonitoringApp {
       }
     });
 
+    this.currentFilteredMemos = filtered;
     this.tableCountEl.textContent = `Showing ${filtered.length} of ${this.memos.length} Memorandum Records`;
     this.tableBody.innerHTML = "";
 
@@ -765,6 +770,210 @@ class MemoMonitoringApp {
     }
   }
 
+  openJournalModal() {
+    this.closeAllModals();
+    const modal = document.getElementById("journal-modal") || this.journalModal;
+
+    const now = new Date();
+    const tomorrow = new Date();
+    tomorrow.setDate(now.getDate() + 1);
+
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const monthStr = monthNames[now.getMonth()];
+    const yearStr = now.getFullYear();
+
+    const fmStr = `${String(now.getDate()).padStart(2, '0')}0800H ${monthStr} ${yearStr}`;
+    const toStr = `${String(tomorrow.getDate()).padStart(2, '0')}0800H ${monthStr} ${yearStr}`;
+
+    const fmInput = document.getElementById("journal-fm-date");
+    const toInput = document.getElementById("journal-to-date");
+    if (fmInput) fmInput.value = fmStr;
+    if (toInput) toInput.value = toStr;
+
+    if (modal) {
+      modal.classList.add("active");
+    } else {
+      this.generateDutyJournalPreview(fmStr, toStr, "PCpl John Warren Delos Reyes", "Duty PNCO", "PMAJ VAN JOSEPH LALAMUNAN", "Command Duty Officer");
+    }
+  }
+
+  handleJournalSetupSubmit(e) {
+    if (e) e.preventDefault();
+    const fmDate = document.getElementById("journal-fm-date")?.value || "300800H July 2026";
+    const toDate = document.getElementById("journal-to-date")?.value || "310800H July 2026";
+    const preparedBy = document.getElementById("journal-prepared-by")?.value || "PCpl John Warren Delos Reyes";
+    const preparedTitle = document.getElementById("journal-prepared-title")?.value || "Duty PNCO";
+    const notedBy = document.getElementById("journal-noted-by")?.value || "PMAJ VAN JOSEPH LALAMUNAN";
+    const notedTitle = document.getElementById("journal-noted-title")?.value || "Command Duty Officer";
+
+    this.generateDutyJournalPreview(fmDate, toDate, preparedBy, preparedTitle, notedBy, notedTitle);
+  }
+
+  generateDutyJournalPreview(fmDate, toDate, preparedBy, preparedTitle, notedBy, notedTitle) {
+    const today = new Date();
+    const mStr = String(today.getMonth() + 1);
+    const dStr = String(today.getDate());
+    const yStr = String(today.getFullYear());
+    const todaySlash = `${mStr}/${dStr}/${yStr}`;
+
+    let journalMemos = [];
+    if (Array.isArray(this.memos)) {
+      journalMemos = this.memos.filter(m => {
+        if (!m) return false;
+        return (m.dateLogged === todaySlash || m.dateReceived === todaySlash);
+      });
+    }
+
+    const hasMemos = journalMemos && journalMemos.length > 0;
+
+    let tableRowsContent = "";
+    if (hasMemos) {
+      tableRowsContent = journalMemos.map((memo, idx) => `
+        <tr style="border-bottom: 1px solid #000;">
+          <td style="border: 1px solid #000; padding: 8px 6px; text-align: center; font-weight: bold;">${idx + 1}</td>
+          <td style="border: 1px solid #000; padding: 8px 10px; text-align: center; font-weight: bold;">${memo.originatingOffice || ''}</td>
+          <td style="border: 1px solid #000; padding: 8px 12px;">${memo.subject || ''}</td>
+          <td style="border: 1px solid #000; padding: 8px 10px; text-align: center;">${memo.actionRequired || memo.remarksStatus || ''}</td>
+        </tr>
+      `).join('');
+    } else {
+      tableRowsContent = `
+        <tr style="border-bottom: 1px solid #000; text-align: center;">
+          <td colspan="4" style="border: 1px solid #000; padding: 16px; font-size: 1.15rem; font-weight: 900; letter-spacing: 2px; text-transform: uppercase;">
+            - NEGATIVE -
+          </td>
+        </tr>
+      `;
+    }
+
+    const container = document.getElementById("printable-duty-journal");
+    if (container) {
+      container.innerHTML = `
+        <div class="duty-journal-sheet" style="font-family: Arial, sans-serif; color: #000; background: #fff; padding: 15px;">
+          <!-- Official PNP Header matching reference image #1 -->
+          <div style="display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 8px;">
+            <img src="assets/pnp_badge.png" alt="PNP Badge" style="height: 55px; width: auto;" />
+            <img src="assets/pro4a_logo.png" alt="PRO4A Logo" style="height: 55px; width: auto;" />
+            <div style="text-align: center;">
+              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800; text-transform: uppercase; color: #000;">PHILIPPINE NATIONAL POLICE</h3>
+              <h2 style="margin: 2px 0; font-size: 1.25rem; font-weight: 900; color: #000;">OFFICE OF THE REGIONAL COMPTROLLERSHIP DIVISION</h2>
+              <p style="margin: 0; font-size: 0.85rem; color: #333;">Police Regional Office 4A • Camp BGen Vicente P Lim, Calamba City</p>
+            </div>
+            <img src="assets/rcd_logo.png" alt="RCD Logo" style="height: 55px; width: 55px;" />
+          </div>
+
+          <hr style="border: 0; border-top: 2px solid #000; margin: 10px 0 14px 0;" />
+
+          <!-- Main Underlined Title -->
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 1.3rem; font-weight: 900; text-decoration: underline; text-transform: uppercase; letter-spacing: 0.5px; color: #000;">RCD (R6) DUTY JOURNAL</h2>
+          </div>
+
+          <!-- Sub Header Dates matching reference image #2 -->
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px; font-weight: bold; font-size: 0.9rem; font-family: 'Courier New', Courier, monospace; color: #000;">
+            <div>
+              PRO4A CALABARZON<br />
+              Camp BGen Vicente P Lim, Calamba City
+            </div>
+            <div style="text-align: right;">
+              FM: ${fmDate}<br />
+              TO: ${toDate}
+            </div>
+          </div>
+
+          <!-- Duty Journal Table matching reference image #2 -->
+          <table style="width: 100%; border-collapse: collapse; border: 2px solid #000; font-size: 0.88rem; margin-bottom: 30px;">
+            <thead>
+              <tr style="border-bottom: 2px solid #000; background: #ffffff;">
+                <th style="border: 1px solid #000; padding: 8px 6px; width: 45px; text-align: center; font-weight: 800;">NR</th>
+                <th style="border: 1px solid #000; padding: 8px 10px; width: 110px; text-align: center; font-weight: 800;">OFFICE</th>
+                <th style="border: 1px solid #000; padding: 8px 12px; text-align: center; font-weight: 800;">INCOMING MEMO/RADIO MESSAGES</th>
+                <th style="border: 1px solid #000; padding: 8px 10px; width: 170px; text-align: center; font-weight: 800;">REMARKS</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- JOURNAL OPEN -->
+              <tr style="border-bottom: 1px solid #000; font-weight: 900; text-align: center;">
+                <td colspan="4" style="border: 1px solid #000; padding: 6px; letter-spacing: 1.5px;">JOURNAL OPEN</td>
+              </tr>
+
+              ${tableRowsContent}
+
+              <!-- JOURNAL CLOSED -->
+              <tr style="border-top: 2px solid #000; font-weight: 900; text-align: center;">
+                <td colspan="4" style="border: 1px solid #000; padding: 6px; letter-spacing: 1.5px;">JOURNAL CLOSED</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Signatures Section matching reference image #2 -->
+          <div style="display: flex; justify-content: space-between; margin-top: 40px; padding: 0 10px; font-size: 0.95rem;">
+            <div style="width: 45%;">
+              <div style="margin-bottom: 45px;">Prepared by:</div>
+              <div style="font-weight: bold; font-size: 1.05rem; text-transform: uppercase;">${preparedBy}</div>
+              <div style="font-size: 0.9rem; color: #333;">${preparedTitle}</div>
+            </div>
+
+            <div style="width: 45%;">
+              <div style="margin-bottom: 45px;">Noted By:</div>
+              <div style="font-weight: bold; font-size: 1.05rem; text-transform: uppercase;">${notedBy}</div>
+              <div style="font-size: 0.9rem; color: #333;">${notedTitle}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    this.closeAllModals();
+    const previewModal = document.getElementById("journal-preview-modal");
+    if (previewModal) previewModal.classList.add("active");
+  }
+
+  printDutyJournalSheet() {
+    const printElement = document.getElementById("printable-duty-journal");
+    if (!printElement) {
+      window.print();
+      return;
+    }
+
+    const printContent = printElement.innerHTML;
+    const printWin = window.open("", "_blank", "width=850,height=1100");
+
+    if (printWin) {
+      printWin.document.open();
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>RCD (R6) Duty Journal Sheet</title>
+          <style>
+            @page { size: A4 portrait; margin: 10mm; }
+            body { font-family: Arial, sans-serif; color: #000; background: #fff; margin: 0; padding: 15px; }
+            img { height: 55px; width: auto; }
+            table { width: 100%; border-collapse: collapse; border: 2px solid #000; font-size: 0.88rem; margin-bottom: 25px; }
+            th, td { border: 1px solid #000; padding: 8px 6px; }
+            th { background: #ffffff; text-align: center; }
+            hr { border: 0; border-top: 2px solid #000; margin: 10px 0 14px 0; }
+          </style>
+        </head>
+        <body>
+          ${printContent}
+          <script>
+            window.onload = function() {
+              window.focus();
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+        </html>
+      `);
+      printWin.document.close();
+    } else {
+      window.print();
+    }
+  }
+
   // CRUD Operations
   openMemoModal(prefill = null) {
     this.closeAllModals();
@@ -1061,6 +1270,17 @@ class MemoMonitoringApp {
     }
   }
 
+  stopWebcam() {
+    if (this.webcamStream) {
+      try {
+        this.webcamStream.getTracks().forEach(track => track.stop());
+      } catch (e) {
+        console.warn("Webcam track stop warning", e);
+      }
+      this.webcamStream = null;
+    }
+  }
+
   closeAllModals() {
     document.querySelectorAll(".modal-overlay").forEach(m => m.classList.remove("active"));
     this.stopWebcam();
@@ -1072,8 +1292,41 @@ let app;
 function initApp() {
   if (!app) {
     app = new MemoMonitoringApp();
+    window.app = app;
   }
 }
+
+window.openDutyJournalDirect = function() {
+  const modal = document.getElementById("journal-modal");
+  const now = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(now.getDate() + 1);
+
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const monthStr = monthNames[now.getMonth()];
+  const yearStr = now.getFullYear();
+
+  const fmStr = `${String(now.getDate()).padStart(2, '0')}0800H ${monthStr} ${yearStr}`;
+  const toStr = `${String(tomorrow.getDate()).padStart(2, '0')}0800H ${monthStr} ${yearStr}`;
+
+  const fmInput = document.getElementById("journal-fm-date");
+  const toInput = document.getElementById("journal-to-date");
+  if (fmInput) fmInput.value = fmStr;
+  if (toInput) toInput.value = toStr;
+
+  if (modal) {
+    document.querySelectorAll(".modal-overlay").forEach(m => m.classList.remove("active"));
+    modal.classList.add("active");
+  } else if (window.app) {
+    window.app.openJournalModal();
+  }
+};
+
+document.addEventListener("click", function(e) {
+  if (e.target.matches(".modal-close, .btn-cancel") || e.target.closest(".modal-close, .btn-cancel")) {
+    document.querySelectorAll(".modal-overlay").forEach(m => m.classList.remove("active"));
+  }
+});
 
 if (document.readyState === "complete" || document.readyState === "interactive") {
   setTimeout(initApp, 1);

@@ -149,6 +149,10 @@
         <button class="btn btn-excel" id="btn-export-excel" title="Export Logbook to Native Excel Spreadsheet (.xlsx)">
           <span>📈 Export to Excel (.xlsx)</span>
         </button>
+
+        <button class="btn btn-journal" id="btn-print-journal" onclick="openDutyJournalDirect()" title="Generate & Print RCD (R6) Duty Journal Report">
+          <span>📋 Print Duty Journal</span>
+        </button>
       </div>
     </section>
 
@@ -483,6 +487,88 @@
       <div class="modal-footer">
         <button class="btn btn-outline btn-cancel">Close</button>
         <button class="btn btn-primary" onclick="window.print()">Print Slip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 5: RCD (R6) Duty Journal Setup Modal -->
+  <div class="modal-overlay" id="journal-modal">
+    <div class="modal-card" style="max-width: 580px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #1e3a8a 0%, #0b1d3a 100%);">
+        <div class="modal-title">
+          <span>📋 RCD (R6) Duty Journal Setup & Print</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <form id="journal-setup-form" onsubmit="event.preventDefault(); if(window.app) window.app.handleJournalSetupSubmit(event);">
+        <div class="modal-body">
+          <p style="font-size:0.88rem; color:#475569; margin-bottom:14px;">
+            Set up the Officers on Duty and Date Range for today's official <strong>RCD (R6) Duty Journal Report</strong>.
+          </p>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Duty Journal Date (FM)</label>
+              <input type="text" id="journal-fm-date" required placeholder="300800H July 2026" />
+            </div>
+
+            <div class="form-group">
+              <label>Duty Journal Date (TO)</label>
+              <input type="text" id="journal-to-date" required placeholder="310800H July 2026" />
+            </div>
+
+            <div class="form-group">
+              <label>Prepared by (Duty PNCO Name)</label>
+              <input type="text" id="journal-prepared-by" required placeholder="e.g. PCpl John Warren Delos Reyes" value="PCpl John Warren Delos Reyes" />
+            </div>
+
+            <div class="form-group">
+              <label>Prepared by Designation</label>
+              <input type="text" id="journal-prepared-title" required placeholder="e.g. Duty PNCO" value="Duty PNCO" />
+            </div>
+
+            <div class="form-group">
+              <label>Noted By (Command Duty Officer Name)</label>
+              <input type="text" id="journal-noted-by" required placeholder="e.g. PMAJ VAN JOSEPH LALAMUNAN" value="PMAJ VAN JOSEPH LALAMUNAN" />
+            </div>
+
+            <div class="form-group">
+              <label>Noted By Designation</label>
+              <input type="text" id="journal-noted-title" required placeholder="e.g. Command Duty Officer" value="Command Duty Officer" />
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-cancel">Cancel</button>
+          <button type="submit" class="btn btn-journal">
+            <span>📋 Generate & Preview Duty Journal</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 6: Printable Duty Journal Preview Modal -->
+  <div class="modal-overlay" id="journal-preview-modal">
+    <div class="modal-card" style="max-width: 920px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #1e3a8a 0%, #0b1d3a 100%);">
+        <div class="modal-title">
+          <span>🖨️ RCD (R6) Duty Journal Print Preview</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body" id="printable-duty-journal" style="background:white; padding:15px;">
+        <!-- Rendered by JS matching exact reference photo format -->
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-cancel">Close</button>
+        <button type="button" class="btn btn-journal" onclick="if(window.app && window.app.printDutyJournalSheet) { window.app.printDutyJournalSheet(); } else { window.print(); }">
+          <span>🖨️ Print Official Duty Journal Sheet</span>
+        </button>
       </div>
     </div>
   </div>

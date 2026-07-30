@@ -305,6 +305,16 @@ body {
   background: linear-gradient(135deg, #166534 0%, #14532d 100%);
 }
 
+.btn-journal {
+  background: linear-gradient(135deg, #1e3a8a 0%, #172554 100%);
+  color: white;
+}
+
+.btn-journal:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
+  box-shadow: 0 4px 10px rgba(30, 58, 138, 0.3);
+}
+
 .btn-outline {
   background: white;
   color: var(--text-primary);
@@ -1088,38 +1098,71 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Print Optimization for Official Office Filing */
+/* Print Optimization & Exact A4 Page Formatting */
+@page {
+  size: A4 portrait;
+  margin: 10mm;
+}
+
 @media print {
-  body {
-    background: white !important;
-    color: black !important;
-  }
-  .official-header, .toolbar-card, .stats-grid, .status-legend-bar, .batch-action-bar, .modal-close, .modal-footer, .table-actions {
+  body > * {
     display: none !important;
   }
-  .main-wrapper, .table-card {
-    padding: 0 !important;
-    box-shadow: none !important;
-    border: none !important;
-  }
-  .memo-table {
-    font-size: 0.8rem !important;
-    border-collapse: collapse !important;
-  }
-  .memo-table th, .memo-table td {
-    border: 1px solid #000 !important;
-    padding: 6px 8px !important;
-    color: black !important;
-  }
-  .modal-overlay.active {
-    position: static !important;
-    background: transparent !important;
+
+  #journal-preview-modal,
+  #routing-modal {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    background: white !important;
+    margin: 0 !important;
     padding: 0 !important;
   }
-  .modal-card {
-    box-shadow: none !important;
-    border: none !important;
+
+  #journal-preview-modal .modal-header,
+  #journal-preview-modal .modal-footer,
+  #journal-preview-modal .modal-close,
+  #routing-modal .modal-header,
+  #routing-modal .modal-footer,
+  #routing-modal .modal-close {
+    display: none !important;
+  }
+
+  #journal-preview-modal .modal-card,
+  #routing-modal .modal-card {
+    width: 100% !important;
     max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  #printable-duty-journal,
+  #printable-duty-journal *,
+  #printable-routing-slip,
+  #printable-routing-slip * {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  #printable-duty-journal table,
+  #printable-duty-journal tr,
+  #printable-duty-journal th,
+  #printable-duty-journal td {
+    display: table-cell !important;
+  }
+
+  #printable-duty-journal table {
+    display: table !important;
+  }
+
+  #printable-duty-journal tr {
+    display: table-row !important;
   }
 }
 
