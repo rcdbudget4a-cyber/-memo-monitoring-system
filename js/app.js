@@ -930,48 +930,7 @@ class MemoMonitoringApp {
   }
 
   printDutyJournalSheet() {
-    const printElement = document.getElementById("printable-duty-journal");
-    if (!printElement) {
-      window.print();
-      return;
-    }
-
-    const printContent = printElement.innerHTML;
-    const printWin = window.open("", "_blank", "width=850,height=1100");
-
-    if (printWin) {
-      printWin.document.open();
-      printWin.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>RCD (R6) Duty Journal Sheet</title>
-          <style>
-            @page { size: A4 portrait; margin: 10mm; }
-            body { font-family: Arial, sans-serif; color: #000; background: #fff; margin: 0; padding: 15px; }
-            img { height: 55px; width: auto; }
-            table { width: 100%; border-collapse: collapse; border: 2px solid #000; font-size: 0.88rem; margin-bottom: 25px; }
-            th, td { border: 1px solid #000; padding: 8px 6px; }
-            th { background: #ffffff; text-align: center; }
-            hr { border: 0; border-top: 2px solid #000; margin: 10px 0 14px 0; }
-          </style>
-        </head>
-        <body>
-          ${printContent}
-          <script>
-            window.onload = function() {
-              window.focus();
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
-        </body>
-        </html>
-      `);
-      printWin.document.close();
-    } else {
-      window.print();
-    }
+    window.print();
   }
 
   // CRUD Operations

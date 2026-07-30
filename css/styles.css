@@ -1109,8 +1109,7 @@ body {
     display: none !important;
   }
 
-  #journal-preview-modal,
-  #routing-modal {
+  body > .modal-overlay.active {
     display: block !important;
     position: absolute !important;
     left: 0 !important;
@@ -1122,17 +1121,14 @@ body {
     padding: 0 !important;
   }
 
-  #journal-preview-modal .modal-header,
-  #journal-preview-modal .modal-footer,
-  #journal-preview-modal .modal-close,
-  #routing-modal .modal-header,
-  #routing-modal .modal-footer,
-  #routing-modal .modal-close {
+  .modal-overlay.active .modal-header,
+  .modal-overlay.active .modal-footer,
+  .modal-overlay.active .modal-close {
     display: none !important;
   }
 
-  #journal-preview-modal .modal-card,
-  #routing-modal .modal-card {
+  .modal-overlay.active .modal-card {
+    display: block !important;
     width: 100% !important;
     max-width: 100% !important;
     box-shadow: none !important;
@@ -1142,27 +1138,10 @@ body {
     background: white !important;
   }
 
-  #printable-duty-journal,
-  #printable-duty-journal *,
-  #printable-routing-slip,
-  #printable-routing-slip * {
+  .modal-overlay.active .modal-body {
     display: block !important;
-    visibility: visible !important;
-  }
-
-  #printable-duty-journal table,
-  #printable-duty-journal tr,
-  #printable-duty-journal th,
-  #printable-duty-journal td {
-    display: table-cell !important;
-  }
-
-  #printable-duty-journal table {
-    display: table !important;
-  }
-
-  #printable-duty-journal tr {
-    display: table-row !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 }
 
