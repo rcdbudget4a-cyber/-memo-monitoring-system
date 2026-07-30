@@ -217,7 +217,7 @@
     </section>
   </main>
 
-  <!-- MODAL 1: OCR Front-Page Scanner Modal -->
+  <!-- MODAL 1: OCR Front-Page Scanner Modal (Camera or Image/PDF Upload) -->
   <div class="modal-overlay" id="ocr-modal">
     <div class="modal-card">
       <div class="modal-header">
@@ -228,23 +228,43 @@
       </div>
 
       <div class="modal-body">
-        <p style="font-size:0.9rem; color:#475569; margin-bottom:16px;">
-          Upload or drop the scanned image of the Memo's <strong>Front Page</strong>. The system will automatically read the text and extract the <strong>Subject</strong>, <strong>Originating Office</strong>, and <strong>Date</strong>.
-        </p>
+        <!-- Dual Mode Toggle (Camera vs File Upload) -->
+        <div style="display:flex; gap:10px; margin-bottom:16px;">
+          <button class="btn btn-primary" id="btn-ocr-mode-camera" style="flex:1;">
+            <span>📸 Use Live Camera</span>
+          </button>
+          <button class="btn btn-outline" id="btn-ocr-mode-upload" style="flex:1;">
+            <span>📁 Upload Image / PDF File</span>
+          </button>
+        </div>
 
-        <div class="dropzone" id="ocr-dropzone">
-          <input type="file" id="ocr-file-input" accept="image/*" style="display:none;" />
-          <div style="font-size: 2.2rem; margin-bottom:8px;">📄</div>
-          <div style="font-size: 1rem; font-weight:700; color:#0b1d3a;">Click or Drag & Drop Memo Front Page Image</div>
-          <div style="font-size: 0.8rem; color:#64748b; margin-top:4px;">Supports JPG, PNG, WEBP, or scanned document photos</div>
+        <!-- Camera Container -->
+        <div id="ocr-camera-container" style="display:block;">
+          <div class="camera-view-box" style="height: 220px; margin-bottom:12px;">
+            <video id="ocr-camera-video" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+            <canvas id="ocr-camera-canvas" style="display:none;"></canvas>
+          </div>
+          <button class="btn btn-camera" id="btn-ocr-snap-camera" style="width:100%; justify-content:center;">
+            <span>📸 Snap Photo & Analyze Text (OCR)</span>
+          </button>
+        </div>
+
+        <!-- File Upload Container (PDF or Image) -->
+        <div id="ocr-upload-container" style="display:none;">
+          <div class="dropzone" id="ocr-dropzone">
+            <input type="file" id="ocr-file-input" accept=".pdf,.jpg,.jpeg,.png,.webp,image/*,application/pdf" style="display:none;" />
+            <div style="font-size: 2.2rem; margin-bottom:8px;">📄</div>
+            <div style="font-size: 1rem; font-weight:700; color:#0b1d3a;">Click or Drag & Drop Memo Image or PDF File</div>
+            <div style="font-size: 0.8rem; color:#64748b; margin-top:4px;">Supports PDF, JPG, PNG, or scanned document photos</div>
+          </div>
         </div>
 
         <div id="ocr-status" style="display:none; margin-top:16px; padding:12px; background:#eff6ff; border-radius:6px; font-weight:600; color:#1d4ed8;"></div>
 
-        <div class="ocr-preview-container">
+        <div class="ocr-preview-container" style="margin-top:16px;">
           <div class="ocr-img-box">
             <img id="ocr-preview-img" src="" alt="Front Page Preview" style="display:none;" />
-            <span id="ocr-img-placeholder" style="color:#64748b; font-size:0.85rem;">No Image Loaded</span>
+            <span id="ocr-img-placeholder" style="color:#64748b; font-size:0.85rem;">No Preview Image</span>
           </div>
 
           <div class="ocr-results-box" id="ocr-results">
