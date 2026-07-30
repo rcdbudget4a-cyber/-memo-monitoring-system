@@ -830,16 +830,16 @@ class MemoMonitoringApp {
     if (hasMemos) {
       tableRowsContent = journalMemos.map((memo, idx) => `
         <tr style="border-bottom: 1px solid #000;">
-          <td style="border: 1px solid #000; padding: 8px 6px; text-align: center; font-weight: bold;">${idx + 1}</td>
-          <td style="border: 1px solid #000; padding: 8px 10px; text-align: center; font-weight: bold;">${memo.originatingOffice || ''}</td>
-          <td style="border: 1px solid #000; padding: 8px 12px;">${memo.subject || ''}</td>
-          <td style="border: 1px solid #000; padding: 8px 10px; text-align: center;">${memo.actionRequired || memo.remarksStatus || ''}</td>
+          <td style="border: 1px solid #000; padding: 5px 4px; text-align: center; font-weight: bold;">${idx + 1}</td>
+          <td style="border: 1px solid #000; padding: 5px 6px; text-align: center; font-weight: bold;">${memo.originatingOffice || ''}</td>
+          <td style="border: 1px solid #000; padding: 5px 8px; font-size: 0.82rem;">${memo.subject || ''}</td>
+          <td style="border: 1px solid #000; padding: 5px 6px; text-align: center; font-size: 0.82rem;">${memo.actionRequired || memo.remarksStatus || ''}</td>
         </tr>
       `).join('');
     } else {
       tableRowsContent = `
         <tr style="border-bottom: 1px solid #000; text-align: center;">
-          <td colspan="4" style="border: 1px solid #000; padding: 16px; font-size: 1.15rem; font-weight: 900; letter-spacing: 2px; text-transform: uppercase;">
+          <td colspan="4" style="border: 1px solid #000; padding: 12px; font-size: 1.05rem; font-weight: 900; letter-spacing: 2px; text-transform: uppercase;">
             - NEGATIVE -
           </td>
         </tr>
@@ -849,28 +849,28 @@ class MemoMonitoringApp {
     const container = document.getElementById("printable-duty-journal");
     if (container) {
       container.innerHTML = `
-        <div class="duty-journal-sheet" style="font-family: Arial, sans-serif; color: #000; background: #fff; padding: 15px;">
+        <div class="duty-journal-sheet" style="font-family: Arial, sans-serif; color: #000; background: #fff; padding: 5px; box-sizing: border-box;">
           <!-- Official PNP Header matching reference image #1 -->
-          <div style="display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 8px;">
-            <img src="assets/pnp_badge.png" alt="PNP Badge" style="height: 55px; width: auto;" />
-            <img src="assets/pro4a_logo.png" alt="PRO4A Logo" style="height: 55px; width: auto;" />
+          <div style="display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 4px;">
+            <img src="assets/pnp_badge.png" alt="PNP Badge" style="height: 48px; width: auto;" />
+            <img src="assets/pro4a_logo.png" alt="PRO4A Logo" style="height: 48px; width: auto;" />
             <div style="text-align: center;">
-              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800; text-transform: uppercase; color: #000;">PHILIPPINE NATIONAL POLICE</h3>
-              <h2 style="margin: 2px 0; font-size: 1.25rem; font-weight: 900; color: #000;">OFFICE OF THE REGIONAL COMPTROLLERSHIP DIVISION</h2>
-              <p style="margin: 0; font-size: 0.85rem; color: #333;">Police Regional Office 4A • Camp BGen Vicente P Lim, Calamba City</p>
+              <h3 style="margin: 0; font-size: 1rem; font-weight: 800; text-transform: uppercase; color: #000;">PHILIPPINE NATIONAL POLICE</h3>
+              <h2 style="margin: 1px 0; font-size: 1.15rem; font-weight: 900; color: #000;">OFFICE OF THE REGIONAL COMPTROLLERSHIP DIVISION</h2>
+              <p style="margin: 0; font-size: 0.8rem; color: #222;">Police Regional Office 4A • Camp BGen Vicente P Lim, Calamba City</p>
             </div>
-            <img src="assets/rcd_logo.png" alt="RCD Logo" style="height: 55px; width: 55px;" />
+            <img src="assets/rcd_logo.png" alt="RCD Logo" style="height: 48px; width: 48px;" />
           </div>
 
-          <hr style="border: 0; border-top: 2px solid #000; margin: 10px 0 14px 0;" />
+          <hr style="border: 0; border-top: 2px solid #000; margin: 6px 0 10px 0;" />
 
           <!-- Main Underlined Title -->
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h2 style="margin: 0; font-size: 1.3rem; font-weight: 900; text-decoration: underline; text-transform: uppercase; letter-spacing: 0.5px; color: #000;">RCD (R6) DUTY JOURNAL</h2>
+          <div style="text-align: center; margin-bottom: 12px;">
+            <h2 style="margin: 0; font-size: 1.2rem; font-weight: 900; text-decoration: underline; text-transform: uppercase; letter-spacing: 0.5px; color: #000;">RCD (R6) DUTY JOURNAL</h2>
           </div>
 
           <!-- Sub Header Dates matching reference image #2 -->
-          <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px; font-weight: bold; font-size: 0.9rem; font-family: 'Courier New', Courier, monospace; color: #000;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8px; font-weight: bold; font-size: 0.85rem; font-family: 'Courier New', Courier, monospace; color: #000;">
             <div>
               PRO4A CALABARZON<br />
               Camp BGen Vicente P Lim, Calamba City
@@ -882,42 +882,42 @@ class MemoMonitoringApp {
           </div>
 
           <!-- Duty Journal Table matching reference image #2 -->
-          <table style="width: 100%; border-collapse: collapse; border: 2px solid #000; font-size: 0.88rem; margin-bottom: 30px;">
+          <table style="width: 100%; border-collapse: collapse; border: 2px solid #000; font-size: 0.85rem; margin-bottom: 16px;">
             <thead>
               <tr style="border-bottom: 2px solid #000; background: #ffffff;">
-                <th style="border: 1px solid #000; padding: 8px 6px; width: 45px; text-align: center; font-weight: 800;">NR</th>
-                <th style="border: 1px solid #000; padding: 8px 10px; width: 110px; text-align: center; font-weight: 800;">OFFICE</th>
-                <th style="border: 1px solid #000; padding: 8px 12px; text-align: center; font-weight: 800;">INCOMING MEMO/RADIO MESSAGES</th>
-                <th style="border: 1px solid #000; padding: 8px 10px; width: 170px; text-align: center; font-weight: 800;">REMARKS</th>
+                <th style="border: 1px solid #000; padding: 6px 4px; width: 40px; text-align: center; font-weight: 800;">NR</th>
+                <th style="border: 1px solid #000; padding: 6px 6px; width: 100px; text-align: center; font-weight: 800;">OFFICE</th>
+                <th style="border: 1px solid #000; padding: 6px 8px; text-align: center; font-weight: 800;">INCOMING MEMO/RADIO MESSAGES</th>
+                <th style="border: 1px solid #000; padding: 6px 6px; width: 150px; text-align: center; font-weight: 800;">REMARKS</th>
               </tr>
             </thead>
             <tbody>
               <!-- JOURNAL OPEN -->
               <tr style="border-bottom: 1px solid #000; font-weight: 900; text-align: center;">
-                <td colspan="4" style="border: 1px solid #000; padding: 6px; letter-spacing: 1.5px;">JOURNAL OPEN</td>
+                <td colspan="4" style="border: 1px solid #000; padding: 5px; letter-spacing: 1.5px;">JOURNAL OPEN</td>
               </tr>
 
               ${tableRowsContent}
 
               <!-- JOURNAL CLOSED -->
               <tr style="border-top: 2px solid #000; font-weight: 900; text-align: center;">
-                <td colspan="4" style="border: 1px solid #000; padding: 6px; letter-spacing: 1.5px;">JOURNAL CLOSED</td>
+                <td colspan="4" style="border: 1px solid #000; padding: 5px; letter-spacing: 1.5px;">JOURNAL CLOSED</td>
               </tr>
             </tbody>
           </table>
 
           <!-- Signatures Section matching reference image #2 -->
-          <div style="display: flex; justify-content: space-between; margin-top: 40px; padding: 0 10px; font-size: 0.95rem;">
+          <div style="display: flex; justify-content: space-between; margin-top: 20px; padding: 0 10px; font-size: 0.9rem; page-break-inside: avoid;">
             <div style="width: 45%;">
-              <div style="margin-bottom: 45px;">Prepared by:</div>
-              <div style="font-weight: bold; font-size: 1.05rem;">${preparedBy}</div>
-              <div style="font-size: 0.9rem; color: #333;">${preparedTitle}</div>
+              <div style="margin-bottom: 30px;">Prepared by:</div>
+              <div style="font-weight: bold; font-size: 1rem;">${preparedBy}</div>
+              <div style="font-size: 0.85rem; color: #333;">${preparedTitle}</div>
             </div>
 
             <div style="width: 45%;">
-              <div style="margin-bottom: 45px;">Noted By:</div>
-              <div style="font-weight: bold; font-size: 1.05rem; text-transform: uppercase;">${notedBy}</div>
-              <div style="font-size: 0.9rem; color: #333;">${notedTitle}</div>
+              <div style="margin-bottom: 30px;">Noted By:</div>
+              <div style="font-weight: bold; font-size: 1rem; text-transform: uppercase;">${notedBy}</div>
+              <div style="font-size: 0.85rem; color: #333;">${notedTitle}</div>
             </div>
           </div>
         </div>
@@ -930,7 +930,14 @@ class MemoMonitoringApp {
   }
 
   printDutyJournalSheet() {
-    window.print();
+    const journalContent = document.getElementById("printable-duty-journal");
+    const printArea = document.getElementById("print-area");
+    if (journalContent && printArea) {
+      printArea.innerHTML = journalContent.innerHTML;
+      window.print();
+    } else {
+      window.print();
+    }
   }
 
   // CRUD Operations
