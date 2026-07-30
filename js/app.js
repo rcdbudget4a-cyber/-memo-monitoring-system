@@ -816,11 +816,45 @@ class MemoMonitoringApp {
     const yStr = String(today.getFullYear());
     const todaySlash = `${mStr}/${dStr}/${yStr}`;
 
+    let selectedDateSlash = todaySlash;
+    let coverDateStr = `${fmDate} to ${toDate} (8:00 AM-8:00 AM)`;
+
+    if (fmDate && toDate) {
+      const fmMatch = fmDate.match(/^(\d{1,2})\d{4}H\s+([A-Za-z]+)\s+(\d{4})/i) || fmDate.match(/^(\d{1,2})[\s\S]*?([A-Za-z]+)\s+(\d{4})/i);
+      const toMatch = toDate.match(/^(\d{1,2})\d{4}H\s+([A-Za-z]+)\s+(\d{4})/i) || toDate.match(/^(\d{1,2})[\s\S]*?([A-Za-z]+)\s+(\d{4})/i);
+
+      if (fmMatch) {
+        const dayNum = parseInt(fmMatch[1], 10);
+        const monthName = fmMatch[2];
+        const yearNum = fmMatch[3];
+        const monthNames = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+        const mIdx = monthNames.indexOf(monthName.toLowerCase());
+        if (mIdx !== -1) {
+          selectedDateSlash = `${mIdx + 1}/${dayNum}/${yearNum}`;
+        }
+      }
+
+      if (fmMatch && toMatch) {
+        const day1 = fmMatch[1];
+        const month1 = fmMatch[2];
+        const year1 = fmMatch[3];
+        const day2 = toMatch[1];
+        const month2 = toMatch[2];
+        const year2 = toMatch[3];
+
+        if (month1.toLowerCase() === month2.toLowerCase() && year1 === year2) {
+          coverDateStr = `${month1} ${day1}-${day2}, ${year1} (8:00 AM-8:00 AM)`;
+        } else {
+          coverDateStr = `${month1} ${day1} - ${month2} ${day2}, ${year1} (8:00 AM-8:00 AM)`;
+        }
+      }
+    }
+
     let journalMemos = [];
     if (Array.isArray(this.memos)) {
       journalMemos = this.memos.filter(m => {
         if (!m) return false;
-        return (m.dateLogged === todaySlash || m.dateReceived === todaySlash);
+        return (m.dateLogged === selectedDateSlash || m.dateReceived === selectedDateSlash);
       });
     }
 
@@ -918,6 +952,37 @@ class MemoMonitoringApp {
               <div style="font-weight: bold; font-size: 1rem; text-transform: uppercase;">${notedBy}</div>
               <div style="font-size: 0.85rem; color: #333;">${notedTitle}</div>
             </div>
+          </div>
+        </div>
+
+        <!-- PAGE 2: Official Journal Cover Sheet matching user screenshot -->
+        <div class="duty-journal-cover-page" style="page-break-before: always; break-before: page; min-height: 260mm; display: flex; flex-direction: column; justify-content: space-between; padding: 40px 20px 20px 20px; box-sizing: border-box; background: #fff; color: #000; font-family: Arial, sans-serif;">
+          
+          <!-- Top Title & CDO Section -->
+          <div style="text-align: center; margin-top: 40px;">
+            <h1 style="font-size: 3rem; font-weight: 900; font-family: 'Arial Black', 'Impact', sans-serif; letter-spacing: 2px; text-transform: uppercase; margin: 0; color: #fff; -webkit-text-stroke: 2.2px #000; text-shadow: 1px 1px 0 #000;">
+              RCD (R6) DAILY JOURNAL
+            </h1>
+
+            <div style="margin-top: 60px; font-weight: bold; font-size: 1.1rem; line-height: 1.7; color: #000;">
+              <div>${coverDateStr}</div>
+              <div>CDO: <span style="text-transform: uppercase;">${notedBy}</span></div>
+            </div>
+          </div>
+
+          <!-- Middle Duty PNCO Section -->
+          <div style="text-align: center; margin-bottom: 80px;">
+            <div style="font-weight: 900; font-size: 1.25rem; text-transform: uppercase; margin-bottom: 15px; color: #000;">
+              ${preparedTitle}
+            </div>
+            <div style="font-weight: bold; font-size: 1.35rem; color: #000;">
+              ${preparedBy}
+            </div>
+          </div>
+
+          <!-- Bottom Copy For Section -->
+          <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 30px; color: #000;">
+            Copy for____________________
           </div>
         </div>
       `;
