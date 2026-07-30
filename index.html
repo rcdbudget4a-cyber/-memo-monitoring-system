@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Office of the Regional Comptrollership Division - Monitoring of Incoming/Outgoing Memo</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/rcd_logo.png">
+
+  <!-- Modern Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Tesseract.js OCR Engine -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <!-- SheetJS Excel (.xlsx) Engine -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Design Tokens & Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Official Header Banner (Inspired by User Screenshot) -->
+  <header class="official-header">
+    <div class="header-container">
+      <div class="header-logos">
+        <!-- Official Philippine National Police (PNP) Badge -->
+        <img src="assets/pnp_badge.png" alt="Philippine National Police Badge" class="official-pnp-badge" title="Philippine National Police" />
+
+        <!-- Official Police Regional Office 4A Shield Emblem -->
+        <img src="assets/pro4a_logo.png" alt="Police Regional Office 4A Shield Emblem" class="official-pro4a-logo" title="Police Regional Office 4A" />
+
+        <!-- Official Regional Comptrollership Division PRO4A Logo -->
+        <img src="assets/rcd_logo.png" alt="Regional Comptrollership Division PRO4A Emblem" class="official-rcd-logo" title="Regional Comptrollership Division PRO4A" />
+      </div>
+
+      <div class="header-title-box">
+        <div class="agency-name">PHILIPPINE NATIONAL POLICE • POLICE REGIONAL OFFICE 4A</div>
+        <div class="system-name">OFFICE OF THE REGIONAL COMPTROLLERSHIP DIVISION</div>
+        <div style="font-size: 0.95rem; font-weight: 700; color: #e2e8f0; letter-spacing: 1px; margin-top:2px;">
+          MONITORING OF INCOMING/OUTGOING MEMO
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="time-badge" id="live-clock">
+          Loading clock...
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-wrapper">
+
+    <!-- KPI Analytics Cards -->
+    <section class="stats-grid">
+      <div class="stat-card blue" id="card-filter-total" style="cursor: pointer;" title="Show All Memos">
+        <div class="stat-icon">📑</div>
+        <div class="stat-info">
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-label">Total Memos Logged</div>
+        </div>
+      </div>
+
+      <div class="stat-card red" id="card-filter-pending-rcd" style="cursor: pointer;" title="Filter Light Red: Inside RCD (Pending Release)">
+        <div class="stat-icon">📥</div>
+        <div class="stat-info">
+          <div class="stat-value" id="stat-pending-rcd">0</div>
+          <div class="stat-label">Inside RCD (Pending)</div>
+        </div>
+      </div>
+
+      <div class="stat-card green" id="card-filter-transmitted" style="cursor: pointer;" title="Filter Light Green: Transmitted / Released Memos">
+        <div class="stat-icon">📤</div>
+        <div class="stat-info">
+          <div class="stat-value" id="stat-transmitted">0</div>
+          <div class="stat-label">Transmitted / Released</div>
+        </div>
+      </div>
+
+      <div class="stat-card navy" id="card-filter-concurred" style="cursor: pointer;" title="Filter Blue Badges: Concurred / Approved Memos">
+        <div class="stat-icon">✅</div>
+        <div class="stat-info">
+          <div class="stat-value" id="stat-concurred">0</div>
+          <div class="stat-label">Concurred / Approved</div>
+        </div>
+      </div>
+
+      <div class="stat-card purple" id="card-drive-folder" style="cursor: pointer;" title="Click to open official Google Drive Storage Folder">
+        <div class="stat-icon">☁️</div>
+        <div class="stat-info">
+          <div class="stat-value" id="stat-drive">0</div>
+          <div class="stat-label">Google Drive Scans ↗</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Toolbar & Search Controls -->
+    <section class="toolbar-card">
+      <div class="toolbar-left">
+        <div class="search-box">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="search-input" placeholder="Search Subject, Control No., Officer..." />
+        </div>
+
+        <select id="office-filter" class="filter-select">
+          <option value="ALL">All Originating Offices</option>
+          <option value="RICTMD">RICTMD</option>
+          <option value="RLRDD">RLRDD</option>
+          <option value="RPO">RPO</option>
+          <option value="RHSU">RHSU</option>
+          <option value="RCD">RCD</option>
+          <option value="RPRMD">RPRMD</option>
+          <option value="RESPO">RESPO</option>
+          <option value="DRDA">DRDA</option>
+          <option value="HEAD BAC">HEAD BAC</option>
+        </select>
+
+        <select id="status-filter" class="filter-select">
+          <option value="ALL">All Remarks / Status</option>
+          <option value="TRANSMITTED">Transmitted to (Released)</option>
+          <option value="CONCURRED">Concurred / Approved</option>
+        </select>
+
+        <select id="sort-order" class="filter-select" style="font-weight: 700; color: #0b1d3a; background: #eff6ff; border-color: #93c5fd;" title="Sort logbook records">
+          <option value="NEWEST">⚡ Sort: Latest Memos First</option>
+          <option value="OLDEST">⏳ Sort: Oldest Memos First</option>
+        </select>
+      </div>
+
+      <div class="toolbar-right">
+        <button class="btn btn-ocr" id="btn-ocr-scan" title="Scan Front Page using AI OCR">
+          <span>📷 Scan Front Page (OCR)</span>
+        </button>
+
+        <button class="btn btn-camera" id="btn-multi-camera" title="Take photos of subsequent pages">
+          <span>📸 Multi-Page Camera</span>
+        </button>
+
+        <button class="btn btn-primary" id="btn-new-memo">
+          <span>📥 Log Incoming Memo</span>
+        </button>
+
+        <a href="https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing" target="_blank" class="btn btn-drive" id="btn-open-drive-folder" title="Open Google Drive Storage Folder">
+          <span>📁 Open Google Drive Folder</span>
+        </a>
+
+        <button class="btn btn-excel" id="btn-export-excel" title="Export Logbook to Native Excel Spreadsheet (.xlsx)">
+          <span>📈 Export to Excel (.xlsx)</span>
+        </button>
+
+        <button class="btn btn-outline" id="btn-backup-db" title="Download Complete System Database (.json)">
+          <span>💾 Backup DB</span>
+        </button>
+
+        <button class="btn btn-outline" id="btn-restore-db" title="Restore System Database from File">
+          <span>📂 Restore DB</span>
+        </button>
+        <input type="file" id="restore-file-input" accept=".json" style="display:none;" />
+
+        <button class="btn btn-outline" id="btn-reset-data" style="color:#dc2626;" title="Reset dataset">
+          <span>🔄 Reset</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Clean Status Legend Guide Bar (Placed right below the Toolbar / Scan Front Page section) -->
+    <div class="status-legend-card">
+      <div class="legend-title">
+        <span>🎨 Status Color Guide:</span>
+      </div>
+      <div class="legend-items-container">
+        <div class="legend-badge-item badge-red-guide">
+          <span class="legend-dot dot-red"></span>
+          <span><strong>Light Red Row:</strong> Inside RCD (Incoming / Pending Release)</span>
+        </div>
+        <div class="legend-badge-item badge-green-guide">
+          <span class="legend-dot dot-green"></span>
+          <span><strong>Light Green Row:</strong> Transmitted (Released Out of RCD)</span>
+        </div>
+        <div class="legend-badge-item badge-blue-guide">
+          <span class="legend-dot dot-blue"></span>
+          <span><strong>Blue Badge:</strong> Concurred / Approved Status</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Spreadsheet Logbook Grid -->
+    <section class="table-card">
+      <!-- Batch Multi-Select Action Bar -->
+      <div class="batch-action-bar" id="batch-action-bar" style="display:none;">
+        <span style="font-weight:700; color:#0b1d3a;" id="batch-count-text">0 Memos Selected</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="btn btn-success btn-sm" id="btn-batch-transmit">🟢 Batch Transmit Selected</button>
+          <button class="btn btn-excel btn-sm" id="btn-batch-excel">📈 Export Selected to Excel</button>
+          <button class="btn btn-outline btn-sm" id="btn-batch-clear" style="color:#64748b;">Clear Selection</button>
+        </div>
+      </div>
+
+      <div class="table-header-info">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>PRO 4A MEMORANDUM MONITORING LOGBOOK SHEET</span>
+        </div>
+        <div id="table-count-label">Showing 0 Records</div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="memo-table">
+          <thead>
+            <tr>
+              <th style="width:36px; text-align:center;"><input type="checkbox" id="select-all-memos" title="Select All Memos" /></th>
+              <th>Date Logged/Received</th>
+              <th>Time</th>
+              <th>Input/Received By</th>
+              <th>Originating Office</th>
+              <th style="min-width: 280px;">Subject / Title of Memo</th>
+              <th>Action Required</th>
+              <th>Remarks / Status</th>
+              <th>Transmitted to what Office</th>
+              <th>DATE RECEIVED</th>
+              <th>Scanned Report/Documents</th>
+            </tr>
+          </thead>
+          <tbody id="memo-table-body">
+            <!-- Rendered by JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL 1: OCR Front-Page Scanner Modal -->
+  <div class="modal-overlay" id="ocr-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span>📷 Front Page AI Memo OCR Scanner</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p style="font-size:0.9rem; color:#475569; margin-bottom:16px;">
+          Upload or drop the scanned image of the Memo's <strong>Front Page</strong>. The system will automatically read the text and extract the <strong>Subject</strong>, <strong>Originating Office</strong>, and <strong>Date</strong>.
+        </p>
+
+        <div class="dropzone" id="ocr-dropzone">
+          <input type="file" id="ocr-file-input" accept="image/*" style="display:none;" />
+          <div style="font-size: 2.2rem; margin-bottom:8px;">📄</div>
+          <div style="font-size: 1rem; font-weight:700; color:#0b1d3a;">Click or Drag & Drop Memo Front Page Image</div>
+          <div style="font-size: 0.8rem; color:#64748b; margin-top:4px;">Supports JPG, PNG, WEBP, or scanned document photos</div>
+        </div>
+
+        <div id="ocr-status" style="display:none; margin-top:16px; padding:12px; background:#eff6ff; border-radius:6px; font-weight:600; color:#1d4ed8;"></div>
+
+        <div class="ocr-preview-container">
+          <div class="ocr-img-box">
+            <img id="ocr-preview-img" src="" alt="Front Page Preview" style="display:none;" />
+            <span id="ocr-img-placeholder" style="color:#64748b; font-size:0.85rem;">No Image Loaded</span>
+          </div>
+
+          <div class="ocr-results-box" id="ocr-results">
+            <div style="font-weight:800; font-size:0.9rem; color:#0b1d3a; border-bottom:1px solid #cbd5e0; padding-bottom:6px;">
+              Extracted Front-Page Metadata
+            </div>
+
+            <div class="ocr-field">
+              <div class="ocr-field-label">Detected Subject / Title</div>
+              <div class="ocr-field-value" id="ocr-parsed-subject">Waiting for scan...</div>
+            </div>
+
+            <div class="ocr-field">
+              <div class="ocr-field-label">Detected Originating Office</div>
+              <div class="ocr-field-value" id="ocr-parsed-office">Waiting for scan...</div>
+            </div>
+
+            <div class="ocr-field">
+              <div class="ocr-field-label">Detected Log Date</div>
+              <div class="ocr-field-value" id="ocr-parsed-date">Waiting for scan...</div>
+            </div>
+
+            <button class="btn btn-success" id="btn-apply-ocr" style="margin-top:auto;">
+              <span>✅ Confirm & Auto-Fill Entry</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline btn-cancel">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: Multi-Page Camera & Drive Attachment Modal -->
+  <div class="modal-overlay" id="camera-modal">
+    <div class="modal-card">
+      <div class="modal-header" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);">
+        <div class="modal-title">
+          <span>📸 Multi-Page Document Camera Scanner</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <p style="font-size:0.9rem; color:#475569; margin-bottom:12px;">
+          Take photos of page 2, page 3, attachments, or annexes ("picture picture lang sa ibang page"). The images will be compiled and attached directly to your Google Drive Folder:
+          <a href="https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing" target="_blank" style="color:#0284c7; font-weight:700; text-decoration:underline;">Open Target Drive Folder ↗</a>
+        </p>
+
+        <div class="camera-view-box">
+          <video id="camera-video" autoplay playsinline></video>
+          <canvas id="camera-canvas" style="display:none;"></canvas>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+          <span style="font-weight:700; color:#0369a1;" id="snap-count-badge">0 Page(s) Captured</span>
+          <button class="btn btn-camera" id="btn-snap-page">
+            <span>📷 Snap Photo of Current Page</span>
+          </button>
+        </div>
+
+        <div class="snap-gallery" id="snap-gallery">
+          <!-- Snapshots Thumbnails rendered here -->
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline btn-cancel">Cancel</button>
+        <button class="btn btn-success" id="btn-upload-drive">
+          <span>☁️ Compile & Attach to Google Drive</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: New / Edit Memo Form Modal -->
+  <div class="modal-overlay" id="memo-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-form-title">
+          <span>📝 Log Memorandum Record</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <form id="memo-form">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Control / Ref No.</label>
+              <input type="text" id="form-id" required readonly style="background:#f1f5f9;" />
+            </div>
+
+            <div class="form-group">
+              <label>Date Logged/Received</label>
+              <input type="text" id="form-date" required />
+            </div>
+
+            <div class="form-group">
+              <label>Time</label>
+              <input type="text" id="form-time" required />
+            </div>
+
+            <div class="form-group">
+              <label>Input / Received By</label>
+              <input type="text" id="form-received-by" required placeholder="e.g. Pat Bomidor, PSSg Tan" />
+            </div>
+
+            <div class="form-group">
+              <label>Originating Office</label>
+              <select id="form-originating" required>
+                <option value="RICTMD">RICTMD</option>
+                <option value="RLRDD">RLRDD</option>
+                <option value="RPO">RPO</option>
+                <option value="RHSU">RHSU</option>
+                <option value="RCD">RCD</option>
+                <option value="RPRMD">RPRMD</option>
+                <option value="RESPO">RESPO</option>
+                <option value="DRDA">DRDA</option>
+                <option value="HEAD BAC">HEAD BAC</option>
+                <option value="RCADD">RCADD</option>
+                <option value="RIDMD">RIDMD</option>
+                <option value="RCEU 4A">RCEU 4A</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Action Required</label>
+              <select id="form-action" required>
+                <option value="For Concur">For Concur</option>
+                <option value="For Info">For Info</option>
+                <option value="Submit AAR/Action Taken">Submit AAR/Action Taken</option>
+                <option value="For Signature">For Signature</option>
+                <option value="For Approval">For Approval</option>
+              </select>
+            </div>
+
+            <div class="form-group full-width">
+              <label>Subject / Title of Memo</label>
+              <textarea id="form-subject" rows="2" required placeholder="Enter exact title of memorandum..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>Remarks / Status</label>
+              <select id="form-remarks" required>
+                <option value="Transmitted to">Transmitted to</option>
+                <option value="For Concur with R6">For Concur with R6</option>
+                <option value="Approved">Approved</option>
+                <option value="Signed">Signed</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Transmitted to what Office</label>
+              <input type="text" id="form-transmitted" placeholder="e.g. Concurred, Forwarded to RICTMD" />
+            </div>
+
+            <div class="form-group">
+              <label>Date Received</label>
+              <input type="text" id="form-date-received" placeholder="MM/DD/YYYY" />
+            </div>
+
+            <div class="form-group">
+              <label>Scanned Pages Count</label>
+              <input type="number" id="form-pages" min="1" value="1" />
+            </div>
+
+            <div class="form-group full-width">
+              <label>Scanned Document Google Drive Link</label>
+              <input type="url" id="form-drive-link" placeholder="https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing" />
+              <small style="color:#64748b; font-size:0.75rem; margin-top:3px; display:block;">
+                🎯 Target Storage Folder: <a href="https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing" target="_blank" style="color:#1d4ed8; text-decoration:underline; font-weight:600;">1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh ↗</a>
+              </small>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Memorandum Entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 4: Printable Transmittal / Routing Slip Modal -->
+  <div class="modal-overlay" id="routing-modal">
+    <div class="modal-card" style="max-width: 700px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span>🖨️ Transmittal / Routing Slip Preview</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body" id="printable-routing-slip">
+        <!-- Generated by JS -->
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline btn-cancel">Close</button>
+        <button class="btn btn-primary" onclick="window.print()">Print Slip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full Google Sheets Dataset (1,207 Records) -->
+  <script src="js/memos_data.js"></script>
+  <!-- Application Logic -->
+  <script src="js/app.js"></script>
+</body>
+</html>
