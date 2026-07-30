@@ -1105,11 +1105,24 @@ body {
 }
 
 @media print {
-  body > * {
+  /* Hide main page elements */
+  .official-header,
+  .main-wrapper,
+  .toolbar-card,
+  .stats-grid,
+  .status-legend-card,
+  .batch-action-bar,
+  .table-card {
     display: none !important;
   }
 
-  body > .modal-overlay.active {
+  /* Hide inactive modal overlays */
+  .modal-overlay {
+    display: none !important;
+  }
+
+  /* Unhide active modal overlay */
+  .modal-overlay.active {
     display: block !important;
     position: absolute !important;
     left: 0 !important;
@@ -1138,8 +1151,10 @@ body {
     background: white !important;
   }
 
-  .modal-overlay.active .modal-body {
+  .modal-overlay.active .modal-body,
+  #printable-duty-journal {
     display: block !important;
+    visibility: visible !important;
     padding: 0 !important;
     margin: 0 !important;
   }
