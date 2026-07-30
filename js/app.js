@@ -910,7 +910,7 @@ class MemoMonitoringApp {
           <div style="display: flex; justify-content: space-between; margin-top: 40px; padding: 0 10px; font-size: 0.95rem;">
             <div style="width: 45%;">
               <div style="margin-bottom: 45px;">Prepared by:</div>
-              <div style="font-weight: bold; font-size: 1.05rem; text-transform: uppercase;">${preparedBy}</div>
+              <div style="font-weight: bold; font-size: 1.05rem;">${preparedBy}</div>
               <div style="font-size: 0.9rem; color: #333;">${preparedTitle}</div>
             </div>
 
@@ -1256,6 +1256,7 @@ function initApp() {
 }
 
 window.openDutyJournalDirect = function() {
+  if (!window.app) initApp();
   const modal = document.getElementById("journal-modal");
   const now = new Date();
   const tomorrow = new Date();
@@ -1278,6 +1279,14 @@ window.openDutyJournalDirect = function() {
     modal.classList.add("active");
   } else if (window.app) {
     window.app.openJournalModal();
+  }
+};
+
+window.submitDutyJournalForm = function(e) {
+  if (e) e.preventDefault();
+  if (!window.app) initApp();
+  if (window.app) {
+    window.app.handleJournalSetupSubmit(e);
   }
 };
 
