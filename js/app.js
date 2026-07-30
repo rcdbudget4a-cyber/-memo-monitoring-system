@@ -850,16 +850,15 @@ class MemoMonitoringApp {
     if (container) {
       container.innerHTML = `
         <div class="duty-journal-sheet" style="font-family: Arial, sans-serif; color: #000; background: #fff; padding: 5px; box-sizing: border-box;">
-          <!-- Official PNP Header matching reference image #1 -->
-          <div style="display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 4px;">
-            <img src="assets/pnp_badge.png" alt="PNP Badge" style="height: 48px; width: auto;" />
-            <img src="assets/pro4a_logo.png" alt="PRO4A Logo" style="height: 48px; width: auto;" />
+          <!-- Official PNP Header matching user screenshot #2 (No PNP Badge) -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 15px; margin-bottom: 4px;">
+            <img src="assets/pro4a_logo.png" alt="PRO4A Logo" style="height: 52px; width: auto;" />
             <div style="text-align: center;">
-              <h3 style="margin: 0; font-size: 1rem; font-weight: 800; text-transform: uppercase; color: #000;">PHILIPPINE NATIONAL POLICE</h3>
-              <h2 style="margin: 1px 0; font-size: 1.15rem; font-weight: 900; color: #000;">OFFICE OF THE REGIONAL COMPTROLLERSHIP DIVISION</h2>
-              <p style="margin: 0; font-size: 0.8rem; color: #222;">Police Regional Office 4A • Camp BGen Vicente P Lim, Calamba City</p>
+              <h3 style="margin: 0; font-size: 1.05rem; font-weight: 900; text-transform: uppercase; color: #000; letter-spacing: 0.5px;">PHILIPPINE NATIONAL POLICE</h3>
+              <h2 style="margin: 1px 0; font-size: 1.15rem; font-weight: 900; text-transform: uppercase; color: #000; letter-spacing: 0.5px;">POLICE REGIONAL OFFICE 4A</h2>
+              <p style="margin: 0; font-size: 1.05rem; font-weight: 500; color: #000;">Regional Comptrollership Division</p>
             </div>
-            <img src="assets/rcd_logo.png" alt="RCD Logo" style="height: 48px; width: 48px;" />
+            <img src="assets/rcd_logo.png" alt="RCD Logo" style="height: 52px; width: 52px;" />
           </div>
 
           <hr style="border: 0; border-top: 2px solid #000; margin: 6px 0 10px 0;" />
@@ -934,10 +933,10 @@ class MemoMonitoringApp {
     const printArea = document.getElementById("print-area");
     if (journalContent && printArea) {
       printArea.innerHTML = journalContent.innerHTML;
-      window.print();
-    } else {
-      window.print();
     }
+    setTimeout(() => {
+      window.print();
+    }, 150);
   }
 
   // CRUD Operations
