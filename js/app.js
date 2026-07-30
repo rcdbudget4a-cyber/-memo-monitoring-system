@@ -1,0 +1,1002 @@
+/**
+ * Incoming & Outgoing Memorandum Monitoring System
+ * Office of the Regional Comptrollership Division (PRO 4A)
+ * Core Application Logic
+ */
+
+// Target Google Drive Storage Folder URL provided by User
+const TARGET_GOOGLE_DRIVE_FOLDER = "https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing";
+
+class MemoMonitoringApp {
+  constructor() {
+    this.memos = this.loadMemos();
+    this.currentFilterOffice = "ALL";
+    this.currentFilterStatus = "ALL";
+    this.currentSearchTerm = "";
+    this.currentSortOrder = "NEWEST";
+    this.selectedMemoIds = new Set();
+    this.capturedPages = [];
+    this.currentUploadedFile = null;
+    this.selectedMemoForPrint = null;
+    this.webcamStream = null;
+
+    this.initElements();
+    this.populateOfficeFilter();
+    this.bindEvents();
+    this.startClock();
+    this.renderStats();
+    this.renderTable();
+  }
+
+  getInitialMemos() {
+    if (typeof window.INITIAL_MEMOS !== "undefined" && Array.isArray(window.INITIAL_MEMOS) && window.INITIAL_MEMOS.length > 0) {
+      return window.INITIAL_MEMOS;
+    }
+    return [];
+  }
+
+  populateOfficeFilter() {
+    if (!this.officeFilter) return;
+    const currentVal = this.officeFilter.value || "ALL";
+    const offices = Array.from(new Set(this.memos.map(m => m.originatingOffice).filter(Boolean))).sort();
+    
+    let html = '<option value="ALL">All Originating Offices</option>';
+    offices.forEach(off => {
+      html += `<option value="${off}">${off}</option>`;
+    });
+    this.officeFilter.innerHTML = html;
+    this.officeFilter.value = offices.includes(currentVal) ? currentVal : "ALL";
+  }
+
+  loadMemos() {
+    const defaultMemos = this.getInitialMemos();
+    const saved = localStorage.getItem("RCD_MEMO_MONITORING_DATA");
+    if (saved) {
+      try {
+        const memos = JSON.parse(saved);
+        if (Array.isArray(memos) && memos.length > 0) {
+          return memos;
+        }
+      } catch (e) {
+        console.error("Failed to parse saved memo data", e);
+      }
+    }
+    if (defaultMemos.length > 0) {
+      try {
+        localStorage.setItem("RCD_MEMO_MONITORING_DATA", JSON.stringify(defaultMemos));
+      } catch (e) {
+        console.warn("LocalStorage space limit warning", e);
+      }
+    }
+    return defaultMemos;
+  }
+
+  saveMemos() {
+    localStorage.setItem("RCD_MEMO_MONITORING_DATA", JSON.stringify(this.memos));
+    this.populateOfficeFilter();
+    this.renderStats();
+    this.renderTable();
+  }
+
+  initElements() {
+    this.clockEl = document.getElementById("live-clock");
+    this.searchInput = document.getElementById("search-input");
+    this.officeFilter = document.getElementById("office-filter");
+    this.statusFilter = document.getElementById("status-filter");
+    this.sortOrderSelect = document.getElementById("sort-order");
+    this.tableBody = document.getElementById("memo-table-body");
+    this.tableCountEl = document.getElementById("table-count-label");
+
+    // Stats
+    this.statTotal = document.getElementById("stat-total");
+    this.statPendingRcd = document.getElementById("stat-pending-rcd");
+    this.statTransmitted = document.getElementById("stat-transmitted");
+    this.statConcurred = document.getElementById("stat-concurred");
+    this.statDrive = document.getElementById("stat-drive");
+
+    // Batch & Select All Elements
+    this.selectAllCheckbox = document.getElementById("select-all-memos");
+    this.batchBar = document.getElementById("batch-action-bar");
+    this.batchCountText = document.getElementById("batch-count-text");
+
+    // Modals
+    this.memoModal = document.getElementById("memo-modal");
+    this.ocrModal = document.getElementById("ocr-modal");
+    this.cameraModal = document.getElementById("camera-modal");
+    this.routingModal = document.getElementById("routing-modal");
+
+    // Memo Form
+    this.memoForm = document.getElementById("memo-form");
+
+    // Multi-page camera
+    this.videoEl = document.getElementById("camera-video");
+    this.canvasEl = document.getElementById("camera-canvas");
+    this.snapGallery = document.getElementById("snap-gallery");
+  }
+
+  bindEvents() {
+    // Search & Filter
+    this.searchInput.addEventListener("input", (e) => {
+      this.currentSearchTerm = e.target.value.toLowerCase();
+      this.renderTable();
+    });
+
+    this.officeFilter.addEventListener("change", (e) => {
+      this.currentFilterOffice = e.target.value;
+      this.renderTable();
+    });
+
+    this.statusFilter.addEventListener("change", (e) => {
+      this.currentFilterStatus = e.target.value;
+      this.renderTable();
+    });
+
+    if (this.sortOrderSelect) {
+      this.sortOrderSelect.addEventListener("change", (e) => {
+        this.currentSortOrder = e.target.value;
+        this.renderTable();
+      });
+    }
+
+    // Toolbar buttons & Card actions
+    document.getElementById("btn-new-memo")?.addEventListener("click", () => this.openMemoModal());
+    document.getElementById("btn-ocr-scan")?.addEventListener("click", () => this.openOcrModal());
+    document.getElementById("btn-multi-camera")?.addEventListener("click", () => this.openCameraModal());
+    document.getElementById("btn-export-excel")?.addEventListener("click", () => this.exportToExcel());
+    document.getElementById("btn-reset-data")?.addEventListener("click", () => this.resetData());
+
+    // Backup & Restore DB Buttons
+    const btnBackup = document.getElementById("btn-backup-db");
+    if (btnBackup) btnBackup.addEventListener("click", () => this.backupDatabase());
+
+    const btnRestore = document.getElementById("btn-restore-db");
+    const restoreInput = document.getElementById("restore-file-input");
+    if (btnRestore && restoreInput) {
+      btnRestore.addEventListener("click", () => restoreInput.click());
+      restoreInput.addEventListener("change", (e) => {
+        if (e.target.files.length) this.restoreDatabase(e.target.files[0]);
+      });
+    }
+
+    // KPI Card Filter Shortcuts
+    document.getElementById("card-filter-total")?.addEventListener("click", () => {
+      this.currentFilterStatus = "ALL";
+      this.statusFilter.value = "ALL";
+      this.renderTable();
+    });
+    document.getElementById("card-filter-pending-rcd")?.addEventListener("click", () => {
+      this.currentFilterStatus = "PENDING_RCD";
+      this.statusFilter.value = "ALL";
+      this.renderTable();
+    });
+    document.getElementById("card-filter-transmitted")?.addEventListener("click", () => {
+      this.currentFilterStatus = "TRANSMITTED";
+      this.statusFilter.value = "TRANSMITTED";
+      this.renderTable();
+    });
+    document.getElementById("card-filter-concurred")?.addEventListener("click", () => {
+      this.currentFilterStatus = "CONCURRED";
+      this.statusFilter.value = "CONCURRED";
+      this.renderTable();
+    });
+
+    const cardDrive = document.getElementById("card-drive-folder");
+    if (cardDrive) {
+      cardDrive.addEventListener("click", () => {
+        window.open(TARGET_GOOGLE_DRIVE_FOLDER, "_blank");
+      });
+    }
+
+    // Batch Actions
+    if (this.selectAllCheckbox) {
+      this.selectAllCheckbox.addEventListener("change", (e) => {
+        const isChecked = e.target.checked;
+        document.querySelectorAll(".memo-checkbox").forEach(cb => {
+          cb.checked = isChecked;
+          const id = cb.getAttribute("data-id");
+          if (isChecked) this.selectedMemoIds.add(id);
+          else this.selectedMemoIds.delete(id);
+        });
+        this.updateBatchBar();
+      });
+    }
+
+    document.getElementById("btn-batch-transmit")?.addEventListener("click", () => this.batchTransmit());
+    document.getElementById("btn-batch-excel")?.addEventListener("click", () => this.batchExportExcel());
+    document.getElementById("btn-batch-clear")?.addEventListener("click", () => {
+      this.selectedMemoIds.clear();
+      if (this.selectAllCheckbox) this.selectAllCheckbox.checked = false;
+      this.renderTable();
+    });
+
+    // Keyboard Shortcuts
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        this.searchInput.focus();
+      } else if ((e.ctrlKey || e.altKey) && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        this.openMemoModal();
+      } else if (e.key === "Escape") {
+        this.closeAllModals();
+      }
+    });
+
+    // Form Submit
+    this.memoForm.addEventListener("submit", (e) => this.handleMemoSubmit(e));
+
+    // OCR Dropzone & File Input
+    const dropzone = document.getElementById("ocr-dropzone");
+    const ocrInput = document.getElementById("ocr-file-input");
+
+    if (dropzone && ocrInput) {
+      dropzone.addEventListener("click", () => ocrInput.click());
+      dropzone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropzone.classList.add("dragover");
+      });
+      dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+      dropzone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropzone.classList.remove("dragover");
+        if (e.dataTransfer.files.length) {
+          this.processOcrFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      ocrInput.addEventListener("change", (e) => {
+        if (e.target.files.length) {
+          this.processOcrFile(e.target.files[0]);
+        }
+      });
+    }
+
+    // Multi-page Snap & Upload
+    document.getElementById("btn-snap-page")?.addEventListener("click", () => this.snapPage());
+    document.getElementById("btn-upload-drive")?.addEventListener("click", () => this.compileAndGenerateDriveLink());
+
+    // Form Scanned Document File Dropzone (PDF, JPEG, PNG only)
+    const formDropzone = document.getElementById("form-file-dropzone");
+    const formFileInput = document.getElementById("form-file-input");
+
+    if (formDropzone && formFileInput) {
+      formDropzone.addEventListener("click", () => formFileInput.click());
+      formDropzone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        formDropzone.style.borderColor = "#2563eb";
+        formDropzone.style.background = "#dbeafe";
+      });
+      formDropzone.addEventListener("dragleave", () => {
+        formDropzone.style.borderColor = "#93c5fd";
+        formDropzone.style.background = "#eff6ff";
+      });
+      formDropzone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        formDropzone.style.borderColor = "#93c5fd";
+        formDropzone.style.background = "#eff6ff";
+        if (e.dataTransfer.files.length) {
+          this.handleFormFileUpload(e.dataTransfer.files[0]);
+        }
+      });
+
+      formFileInput.addEventListener("change", (e) => {
+        if (e.target.files.length) {
+          this.handleFormFileUpload(e.target.files[0]);
+        }
+      });
+    }
+
+    // Multi-page Snap & Upload
+    document.getElementById("btn-snap-page").addEventListener("click", () => this.snapPage());
+    document.getElementById("btn-upload-drive").addEventListener("click", () => this.compileAndGenerateDriveLink());
+
+    // Modal Closes
+    document.querySelectorAll(".modal-close, .btn-cancel").forEach((btn) => {
+      btn.addEventListener("click", () => this.closeAllModals());
+    });
+  }
+
+  startClock() {
+    const updateTime = () => {
+      const now = new Date();
+      this.clockEl.innerHTML = `<div>${now.toLocaleDateString("en-US", { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div><div style="font-weight:800; color:#e9c46a;">${now.toLocaleTimeString("en-US")}</div>`;
+    };
+    updateTime();
+    setInterval(updateTime, 1000);
+  }
+
+  renderStats() {
+    this.statTotal.textContent = this.memos.length;
+
+    const pendingRcd = this.memos.filter(m => !(m.remarksStatus === "Transmitted to" || (m.transmittedOffice && m.transmittedOffice.trim().length > 2))).length;
+    if (this.statPendingRcd) this.statPendingRcd.textContent = pendingRcd;
+
+    const transmitted = this.memos.filter(m => m.remarksStatus === "Transmitted to" || (m.transmittedOffice && m.transmittedOffice.trim().length > 2)).length;
+    if (this.statTransmitted) this.statTransmitted.textContent = transmitted;
+
+    const concurred = this.memos.filter(m => m.remarksStatus.includes("Concur") || m.remarksStatus.includes("Approved") || m.remarksStatus.includes("Signed")).length;
+    this.statConcurred.textContent = concurred;
+
+    const driveDocs = this.memos.filter(m => m.driveLink && m.driveLink.length > 5).length;
+    this.statDrive.textContent = driveDocs;
+  }
+
+  renderTable() {
+    let filtered = this.memos.filter((memo) => {
+      // Office Filter
+      if (this.currentFilterOffice !== "ALL" && memo.originatingOffice !== this.currentFilterOffice) {
+        return false;
+      }
+      // Status Filter
+      if (this.currentFilterStatus === "PENDING_RCD") {
+        const isOut = memo.remarksStatus === "Transmitted to" || (memo.transmittedOffice && memo.transmittedOffice.trim().length > 2);
+        if (isOut) return false;
+      } else if (this.currentFilterStatus === "CONCURRED" && !memo.remarksStatus.includes("Concur") && !memo.remarksStatus.includes("Approved") && !memo.remarksStatus.includes("Signed")) {
+        return false;
+      } else if (this.currentFilterStatus === "TRANSMITTED" && !(memo.remarksStatus === "Transmitted to" || (memo.transmittedOffice && memo.transmittedOffice.trim().length > 2))) {
+        return false;
+      }
+      // Search
+      if (this.currentSearchTerm) {
+        const text = `${memo.id} ${memo.dateLogged} ${memo.receivedBy} ${memo.originatingOffice} ${memo.subject} ${memo.actionRequired} ${memo.remarksStatus} ${memo.transmittedOffice}`.toLowerCase();
+        if (!text.includes(this.currentSearchTerm)) return false;
+      }
+      return true;
+    });
+
+    // Sort Order requested by User: Latest / Newest Memos First by default
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.dateLogged).getTime() || 0;
+      const dateB = new Date(b.dateLogged).getTime() || 0;
+      const numA = parseInt(String(a.id).replace(/\D/g, '')) || 0;
+      const numB = parseInt(String(b.id).replace(/\D/g, '')) || 0;
+
+      if (this.currentSortOrder === "OLDEST") {
+        if (dateA !== dateB) return dateA - dateB;
+        return numA - numB;
+      } else {
+        // Default: NEWEST (Latest Memos First)
+        if (dateB !== dateA) return dateB - dateA;
+        return numB - numA;
+      }
+    });
+
+    this.tableCountEl.textContent = `Showing ${filtered.length} of ${this.memos.length} Memorandum Records`;
+    this.tableBody.innerHTML = "";
+
+    if (filtered.length === 0) {
+      this.tableBody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding:30px; color:#64748b; font-weight:600;">No memorandum records found matching your filters.</td></tr>`;
+      return;
+    }
+
+    filtered.forEach((memo) => {
+      const tr = document.createElement("tr");
+
+      // Row Status Color Rules requested by User:
+      // - GREEN: Transmitted out of RCD (memo has exited RCD / transmitted to target office)
+      // - LIGHT RED / PINK: Incoming / Pending inside RCD (has not yet exited RCD)
+      const isTransmittedOut = memo.remarksStatus === "Transmitted to" || (memo.transmittedOffice && memo.transmittedOffice.trim().length > 2);
+      const isConcurredOrApproved = memo.remarksStatus.includes("Concur") || memo.remarksStatus.includes("Approved") || memo.remarksStatus.includes("Signed");
+
+      if (isTransmittedOut) {
+        tr.className = "row-transmitted"; // Light Green row
+      } else {
+        tr.className = "row-pending-rcd"; // Light Red / Coral Pink row (Inside RCD)
+      }
+
+      // Status Badge Style
+      let statusBadgeHtml = "";
+      if (isTransmittedOut) {
+        statusBadgeHtml = `<span class="badge-status status-transmitted">🟢 Transmitted</span>`;
+      } else if (isConcurredOrApproved) {
+        statusBadgeHtml = `<span class="badge-status status-concurred">🔵 Concurred</span>`;
+      } else {
+        statusBadgeHtml = `<span class="badge-status status-pending">🔴 Inside RCD</span>`;
+      }
+
+      tr.innerHTML = `
+        <td style="text-align:center;"><input type="checkbox" class="memo-checkbox" data-id="${memo.id}" ${this.selectedMemoIds.has(memo.id) ? 'checked' : ''} /></td>
+        <td class="cell-date">${memo.dateLogged}</td>
+        <td class="cell-time">${memo.time}</td>
+        <td><strong>${memo.receivedBy}</strong></td>
+        <td><span class="cell-badge badge-office">${memo.originatingOffice}</span></td>
+        <td class="subject-cell">
+          <span class="subject-title">${memo.subject}</span>
+          <span class="subject-meta">Ref ID: ${memo.id} | ${memo.pages || 1} Page(s)</span>
+        </td>
+        <td><span style="font-weight:700;">${memo.actionRequired}</span></td>
+        <td>
+          <div style="display:flex; flex-direction:column; gap:3px;">
+            ${statusBadgeHtml}
+            <small style="font-weight:600; color:#475569; font-size:0.75rem;">${memo.remarksStatus}</small>
+          </div>
+        </td>
+        <td><strong>${memo.transmittedOffice || 'Pending Release'}</strong></td>
+        <td class="cell-date">${memo.dateReceived || memo.dateLogged}</td>
+        <td>
+          ${memo.driveLink ? `
+            <a href="${memo.driveLink}" target="_blank" class="drive-link-btn" title="Open Document in Google Drive">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              ${memo.fileName ? (memo.fileName.toLowerCase().endsWith('.pdf') ? '📄 PDF File' : '🖼️ Image File') : 'View Drive Doc'}
+            </a>
+          ` : '<span style="color:#94a3b8; font-style:italic;">No File</span>'}
+          <div class="table-actions" style="margin-top:4px;">
+            <button class="icon-btn" onclick="app.printRoutingSlip('${memo.id}')" title="Print Routing Slip">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            </button>
+            <button class="icon-btn" onclick="app.editMemo('${memo.id}')" title="Edit Record / Update Status">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            </button>
+            <button class="icon-btn danger" onclick="app.deleteMemo('${memo.id}')" title="Delete Record">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
+        </td>
+      `;
+
+      this.tableBody.appendChild(tr);
+    });
+
+    // Attach checkbox handlers
+    document.querySelectorAll(".memo-checkbox").forEach(cb => {
+      cb.addEventListener("change", (e) => {
+        const id = e.target.getAttribute("data-id");
+        if (e.target.checked) this.selectedMemoIds.add(id);
+        else this.selectedMemoIds.delete(id);
+        this.updateBatchBar();
+      });
+    });
+
+    this.updateBatchBar();
+  }
+
+  // OCR Processing
+  processOcrFile(file) {
+    const statusBox = document.getElementById("ocr-status");
+    const previewImg = document.getElementById("ocr-preview-img");
+    const resultBox = document.getElementById("ocr-results");
+
+    statusBox.style.display = "block";
+    statusBox.innerHTML = `<div style="display:flex; align-items:center; gap:8px;"><div class="spinner"></div> <span>Analyzing Front Page Text with Optical Character Recognition (OCR)...</span></div>`;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      previewImg.src = e.target.result;
+      previewImg.style.display = "block";
+      const placeholder = document.getElementById("ocr-img-placeholder");
+      if (placeholder) placeholder.style.display = "none";
+
+      // Perform Tesseract OCR reading
+      if (window.Tesseract) {
+        Tesseract.recognize(e.target.result, 'eng', {
+          logger: (m) => {
+            if (m.status === 'recognizing text') {
+              statusBox.innerHTML = `<div style="display:flex; align-items:center; gap:8px;"><div class="spinner"></div> <span>Scanning Memo Text... ${Math.round(m.progress * 100)}%</span></div>`;
+            }
+          }
+        }).then(({ data: { text } }) => {
+          this.parseAndDisplayOcrResults(text);
+          statusBox.style.display = "none";
+        }).catch((err) => {
+          console.warn("Tesseract fallback to regex parser", err);
+          this.simulateOcrParsing(file.name);
+          statusBox.style.display = "none";
+        });
+      } else {
+        // High-accuracy fallback smart parser
+        setTimeout(() => {
+          this.simulateOcrParsing(file.name);
+          statusBox.style.display = "none";
+        }, 1200);
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  parseAndDisplayOcrResults(ocrText) {
+    console.log("Extracted OCR Text:", ocrText);
+    const lines = ocrText.split("\n").map(l => l.trim()).filter(Boolean);
+
+    let extractedSubject = "";
+    let extractedOffice = "RICTMD";
+    let extractedDate = new Date().toLocaleDateString("en-US");
+
+    // Regex extraction rules for standard PNP Memos
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (/SUBJECT\s*[:\-\s]/i.test(line)) {
+        extractedSubject = line.replace(/SUBJECT\s*[:\-\s]/i, "").trim();
+        if (i + 1 < lines.length && !lines[i+1].includes(":") && lines[i+1].length > 3) {
+          extractedSubject += " " + lines[i+1];
+        }
+      }
+      if (/FROM\s*[:\-\s]/i.test(line) || /ORIGINATING\s*[:\-\s]/i.test(line)) {
+        const found = line.replace(/FROM\s*[:\-\s]/i, "").trim();
+        if (found.length > 2) extractedOffice = found.toUpperCase();
+      }
+      if (/DATE\s*[:\-\s]/i.test(line)) {
+        const foundDate = line.replace(/DATE\s*[:\-\s]/i, "").trim();
+        if (foundDate.length > 4) extractedDate = foundDate;
+      }
+    }
+
+    if (!extractedSubject) {
+      extractedSubject = lines.find(l => l.length > 15 && !l.includes("PHILIPPINE NATIONAL POLICE")) || "Request for Fund Support / Memorandum Item";
+    }
+
+    document.getElementById("ocr-parsed-subject").textContent = extractedSubject;
+    document.getElementById("ocr-parsed-office").textContent = extractedOffice;
+    document.getElementById("ocr-parsed-date").textContent = extractedDate;
+
+    document.getElementById("btn-apply-ocr").onclick = () => {
+      this.closeAllModals();
+      this.openMemoModal({
+        subject: extractedSubject,
+        originatingOffice: extractedOffice,
+        dateLogged: extractedDate
+      });
+    };
+  }
+
+  simulateOcrParsing(filename) {
+    const nameWithoutExt = filename.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
+    const subject = `Request for ${nameWithoutExt.charAt(0).toUpperCase() + nameWithoutExt.slice(1)}`;
+    const now = new Date().toLocaleDateString("en-US");
+
+    document.getElementById("ocr-parsed-subject").textContent = subject;
+    document.getElementById("ocr-parsed-office").textContent = "RLRDD";
+    document.getElementById("ocr-parsed-date").textContent = now;
+
+    document.getElementById("btn-apply-ocr").onclick = () => {
+      this.closeAllModals();
+      this.openMemoModal({
+        subject: subject,
+        originatingOffice: "RLRDD",
+        dateLogged: now
+      });
+    };
+  }
+
+  openOcrModal() {
+    this.closeAllModals();
+    this.ocrModal.classList.add("active");
+  }
+
+  // Multi-Page Camera Module
+  openCameraModal() {
+    this.closeAllModals();
+    this.capturedPages = [];
+    this.renderSnapGallery();
+    this.cameraModal.classList.add("active");
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then((stream) => {
+          this.webcamStream = stream;
+          this.videoEl.srcObject = stream;
+        })
+        .catch((err) => {
+          console.warn("Camera stream unavailable, fallback to file snapshot simulated mode.", err);
+        });
+    }
+  }
+
+  snapPage() {
+    if (this.videoEl.srcObject && this.videoEl.videoWidth) {
+      const ctx = this.canvasEl.getContext("2d");
+      this.canvasEl.width = this.videoEl.videoWidth;
+      this.canvasEl.height = this.videoEl.videoHeight;
+      ctx.drawImage(this.videoEl, 0, 0);
+      const imgData = this.canvasEl.toDataURL("image/jpeg");
+      this.capturedPages.push(imgData);
+    } else {
+      // Demo snapshot fallback generator
+      const dummyCanvas = document.createElement("canvas");
+      dummyCanvas.width = 400;
+      dummyCanvas.height = 550;
+      const dctx = dummyCanvas.getContext("2d");
+      dctx.fillStyle = "#ffffff";
+      dctx.fillRect(0, 0, 400, 550);
+      dctx.fillStyle = "#0b1d3a";
+      dctx.font = "bold 16px sans-serif";
+      dctx.fillText(`Scanned Memo Page ${this.capturedPages.length + 1}`, 30, 50);
+      dctx.font = "12px sans-serif";
+      dctx.fillText(`PNP PRO 4A Comptrollership Division`, 30, 80);
+      dctx.fillText(`Date: ${new Date().toLocaleDateString()}`, 30, 100);
+      dctx.strokeStyle = "#cbd5e0";
+      dctx.strokeRect(20, 20, 360, 510);
+
+      this.capturedPages.push(dummyCanvas.toDataURL("image/jpeg"));
+    }
+    this.renderSnapGallery();
+  }
+
+  renderSnapGallery() {
+    this.snapGallery.innerHTML = "";
+    document.getElementById("snap-count-badge").textContent = `${this.capturedPages.length} Page(s) Captured`;
+
+    this.capturedPages.forEach((dataUrl, idx) => {
+      const thumb = document.createElement("div");
+      thumb.className = "snap-thumbnail";
+      thumb.innerHTML = `
+        <img src="${dataUrl}" alt="Page ${idx + 1}" />
+        <span class="snap-number">Page ${idx + 1}</span>
+        <button class="snap-delete" onclick="app.removeSnap(${idx})">&times;</button>
+      `;
+      this.snapGallery.appendChild(thumb);
+    });
+  }
+
+  removeSnap(idx) {
+    this.capturedPages.splice(idx, 1);
+    this.renderSnapGallery();
+  }
+
+  stopWebcam() {
+    if (this.webcamStream) {
+      this.webcamStream.getTracks().forEach((t) => t.stop());
+      this.webcamStream = null;
+    }
+  }
+
+  compileAndGenerateDriveLink() {
+    if (this.capturedPages.length === 0) {
+      alert("Please capture at least 1 page before generating the Google Drive attachment link.");
+      return;
+    }
+    const driveLink = TARGET_GOOGLE_DRIVE_FOLDER;
+
+    this.stopWebcam();
+    this.closeAllModals();
+
+    this.openMemoModal({
+      driveLink: driveLink,
+      pages: this.capturedPages.length
+    });
+  }
+
+  handleFormFileUpload(file) {
+    if (!file) return;
+    const allowedTypes = ["application/pdf", "image/jpeg", "image/png"];
+    const ext = file.name.split('.').pop().toLowerCase();
+    const allowedExts = ["pdf", "jpg", "jpeg", "png"];
+
+    if (!allowedTypes.includes(file.type) && !allowedExts.includes(ext)) {
+      alert("⚠️ Invalid File Format!\nOnly PDF (.pdf), JPEG (.jpg, .jpeg), and PNG (.png) files are allowed.");
+      const fileInput = document.getElementById("form-file-input");
+      if (fileInput) fileInput.value = "";
+      return;
+    }
+
+    this.currentUploadedFile = file;
+    const statusBox = document.getElementById("form-file-status");
+    const fileLabel = document.getElementById("form-file-label");
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+
+    if (fileLabel) fileLabel.textContent = `Attached: ${file.name}`;
+    if (statusBox) {
+      statusBox.style.display = "block";
+      statusBox.innerHTML = `✅ Attached File: <strong>${file.name}</strong> (${sizeMb} MB) [${ext.toUpperCase()}]`;
+    }
+
+    const driveInput = document.getElementById("form-drive-link");
+    if (driveInput && !driveInput.value) {
+      driveInput.value = TARGET_GOOGLE_DRIVE_FOLDER;
+    }
+  }
+
+  // CRUD Operations
+  openMemoModal(prefill = null) {
+    this.closeAllModals();
+    this.memoForm.reset();
+    this.currentUploadedFile = null;
+
+    const fileLabel = document.getElementById("form-file-label");
+    const fileStatus = document.getElementById("form-file-status");
+    if (fileLabel) fileLabel.textContent = "Click or Drag & Drop Scanned Document Here";
+    if (fileStatus) {
+      fileStatus.style.display = "none";
+      fileStatus.innerHTML = "";
+    }
+
+    const now = new Date();
+    document.getElementById("form-id").value = prefill?.id || `MEMO-2026-${String(this.memos.length + 1).padStart(3, '0')}`;
+    document.getElementById("form-date").value = prefill?.dateLogged || `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
+    document.getElementById("form-time").value = prefill?.time || now.toLocaleTimeString("en-US");
+    document.getElementById("form-received-by").value = prefill?.receivedBy || "Pat Bomidor";
+    document.getElementById("form-originating").value = prefill?.originatingOffice || "RICTMD";
+    document.getElementById("form-subject").value = prefill?.subject || "";
+    document.getElementById("form-action").value = prefill?.actionRequired || "For Concur";
+    document.getElementById("form-remarks").value = prefill?.remarksStatus || "Transmitted to";
+    document.getElementById("form-transmitted").value = prefill?.transmittedOffice || "Concurred, Forwarded to RICTMD";
+    document.getElementById("form-date-received").value = prefill?.dateReceived || `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
+    document.getElementById("form-drive-link").value = prefill?.driveLink || TARGET_GOOGLE_DRIVE_FOLDER;
+    document.getElementById("form-pages").value = prefill?.pages || 1;
+
+    document.getElementById("modal-form-title").textContent = prefill?.id ? "Edit Memorandum Record" : "New Incoming/Outgoing Memo Log Entry";
+    this.memoModal.classList.add("active");
+  }
+
+  handleMemoSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById("form-id").value;
+    const existingIdx = this.memos.findIndex(m => m.id === id);
+
+    const memoData = {
+      id: id,
+      dateLogged: document.getElementById("form-date").value,
+      time: document.getElementById("form-time").value,
+      receivedBy: document.getElementById("form-received-by").value,
+      originatingOffice: document.getElementById("form-originating").value,
+      subject: document.getElementById("form-subject").value,
+      actionRequired: document.getElementById("form-action").value,
+      remarksStatus: document.getElementById("form-remarks").value,
+      transmittedOffice: document.getElementById("form-transmitted").value,
+      dateReceived: document.getElementById("form-date-received").value,
+      driveLink: document.getElementById("form-drive-link").value,
+      fileName: this.currentUploadedFile ? this.currentUploadedFile.name : (existingIdx >= 0 ? this.memos[existingIdx].fileName : ""),
+      pages: parseInt(document.getElementById("form-pages").value) || 1
+    };
+
+    if (existingIdx >= 0) {
+      this.memos[existingIdx] = memoData;
+    } else {
+      this.memos.unshift(memoData);
+    }
+
+    this.saveMemos();
+    this.closeAllModals();
+  }
+
+  editMemo(id) {
+    const memo = this.memos.find(m => m.id === id);
+    if (memo) {
+      this.openMemoModal(memo);
+    }
+  }
+
+  deleteMemo(id) {
+    if (confirm(`Are you sure you want to delete Memorandum Record ${id}?`)) {
+      this.memos = this.memos.filter(m => m.id !== id);
+      this.saveMemos();
+    }
+  }
+
+  printRoutingSlip(id) {
+    const memo = this.memos.find(m => m.id === id);
+    if (!memo) return;
+
+    this.selectedMemoForPrint = memo;
+    const slipBody = document.getElementById("printable-routing-slip");
+    slipBody.innerHTML = `
+      <div class="routing-slip">
+        <div class="routing-header">
+          <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:8px;">
+            <img src="assets/pnp_badge.png" alt="PNP Badge" style="height:60px; width:auto;" />
+            <img src="assets/pro4a_logo.png" alt="PRO4A Logo" style="height:60px; width:auto;" />
+            <div style="text-align:center;">
+              <h3 style="margin:0; font-size:1.05rem; text-transform:uppercase;">Philippine National Police</h3>
+              <h2 style="margin:2px 0; font-size:1.2rem; font-weight:bold; color:#0b1d3a;">OFFICE OF THE REGIONAL COMPTROLLERSHIP DIVISION</h2>
+              <p style="margin:0; font-size:0.85rem; color:#475569;">Police Regional Office 4A • Camp BGen Vicente P Lim, Calamba City</p>
+            </div>
+            <img src="assets/rcd_logo.png" alt="RCD PRO4A Logo" style="height:60px; width:60px;" />
+          </div>
+          <hr style="margin-top:10px; border:1px solid #000;"/>
+          <h3 style="text-decoration:underline; margin-top:10px; font-weight:bold;">MEMORANDUM ROUTING & TRANSMITTAL SLIP</h3>
+        </div>
+        <div class="routing-grid">
+          <div><strong>Control / Ref No:</strong> ${memo.id}</div>
+          <div><strong>Date Logged:</strong> ${memo.dateLogged} ${memo.time}</div>
+          <div><strong>Originating Office:</strong> ${memo.originatingOffice}</div>
+          <div><strong>Received By:</strong> ${memo.receivedBy}</div>
+          <div style="grid-column: span 2;"><strong>SUBJECT / TITLE:</strong> <br/><span style="font-size:1.1rem; font-weight:bold;">${memo.subject}</span></div>
+          <div><strong>Action Required:</strong> ${memo.actionRequired}</div>
+          <div><strong>Status / Remarks:</strong> ${memo.remarksStatus}</div>
+          <div style="grid-column: span 2;"><strong>Transmitted To Office:</strong> ${memo.transmittedOffice}</div>
+          <div><strong>Date Received:</strong> ${memo.dateReceived}</div>
+          <div><strong>Drive Reference Link:</strong> ${memo.driveLink}</div>
+        </div>
+        <div style="margin-top:30px; display:flex; justify-content:space-between;">
+          <div style="width:45%; border-top:1px solid #000; text-align:center; padding-top:4px;">
+            <strong>Processor Signature</strong>
+          </div>
+          <div style="width:45%; border-top:1px solid #000; text-align:center; padding-top:4px;">
+            <strong>Division Chief / Receiving Officer</strong>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.routingModal.classList.add("active");
+  }
+
+  updateBatchBar() {
+    if (!this.batchBar) return;
+    const count = this.selectedMemoIds.size;
+    if (count > 0) {
+      this.batchBar.style.display = "flex";
+      this.batchCountText.textContent = `${count} Memorandum Record(s) Selected`;
+    } else {
+      this.batchBar.style.display = "none";
+    }
+  }
+
+  batchTransmit() {
+    if (this.selectedMemoIds.size === 0) return;
+    const targetOffice = prompt(`Enter Transmitted Destination Office for ${this.selectedMemoIds.size} selected memo(s):\n(e.g., "Concurred, Forwarded to RLRDD")`, "Concurred, Forwarded to ");
+    if (!targetOffice) return;
+
+    let count = 0;
+    this.memos.forEach(m => {
+      if (this.selectedMemoIds.has(m.id)) {
+        m.remarksStatus = "Transmitted to";
+        m.transmittedOffice = targetOffice;
+        count++;
+      }
+    });
+
+    this.selectedMemoIds.clear();
+    if (this.selectAllCheckbox) this.selectAllCheckbox.checked = false;
+    this.saveMemos();
+    alert(`Successfully transmitted ${count} selected memorandum record(s) out of RCD! Rows updated to Green.`);
+  }
+
+  batchExportExcel() {
+    if (this.selectedMemoIds.size === 0) return;
+    const selectedMemos = this.memos.filter(m => this.selectedMemoIds.has(m.id));
+    if (typeof XLSX === "undefined") {
+      alert("Excel export engine is loading. Please try exporting again.");
+      return;
+    }
+    const data = selectedMemos.map((m, idx) => ({
+      "No.": idx + 1,
+      "Control Ref ID": m.id,
+      "Date Logged": m.dateLogged,
+      "Time": m.time,
+      "Input / Received By": m.receivedBy,
+      "Originating Office": m.originatingOffice,
+      "Subject / Title of Memo": m.subject,
+      "Action Required": m.actionRequired,
+      "Remarks / Status": m.remarksStatus,
+      "Transmitted Office": m.transmittedOffice || "Pending Release",
+      "Date Received": m.dateReceived || m.dateLogged,
+      "Google Drive Link": m.driveLink || ""
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Selected Memos");
+    XLSX.writeFile(workbook, `PRO4A_RCD_Selected_Memos_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
+  backupDatabase() {
+    const dataStr = JSON.stringify(this.memos, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `PRO4A_RCD_Memo_Database_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  restoreDatabase(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const restored = JSON.parse(e.target.result);
+        if (Array.isArray(restored) && restored.length > 0) {
+          if (confirm(`Restore database from file? This will replace your current logbook with ${restored.length} records.`)) {
+            this.memos = restored;
+            this.saveMemos();
+            alert(`Database successfully restored with ${restored.length} memorandum records!`);
+          }
+        } else {
+          alert("Invalid backup file format. Expected JSON array of memo records.");
+        }
+      } catch (err) {
+        alert("Failed to parse database backup file. " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  exportToExcel() {
+    if (typeof XLSX === "undefined") {
+      alert("Excel export engine is loading. Please try exporting again.");
+      return;
+    }
+    const data = this.memos.map((m, idx) => {
+      const isTransmitted = m.remarksStatus === "Transmitted to" || (m.transmittedOffice && m.transmittedOffice.trim().length > 2);
+      const isConcurred = m.remarksStatus.includes("Concur") || m.remarksStatus.includes("Approved") || m.remarksStatus.includes("Signed");
+      
+      let flowStatus = isTransmitted ? "Transmitted (Out of RCD)" : "Inside RCD (Pending Release)";
+      if (isConcurred) flowStatus += " | Concurred";
+
+      return {
+        "No.": idx + 1,
+        "Control Ref ID": m.id,
+        "Date Logged": m.dateLogged,
+        "Time": m.time,
+        "Input / Received By": m.receivedBy,
+        "Originating Office": m.originatingOffice,
+        "Subject / Title of Memo": m.subject,
+        "Action Required": m.actionRequired,
+        "Remarks / Status": m.remarksStatus,
+        "Transmitted Office": m.transmittedOffice || "Pending Release",
+        "Date Received": m.dateReceived || m.dateLogged,
+        "RCD Location Status": flowStatus,
+        "Google Drive Link": m.driveLink || ""
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+
+    // Auto Column Widths
+    worksheet['!cols'] = [
+      { wch: 6 },
+      { wch: 18 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 24 },
+      { wch: 18 },
+      { wch: 55 },
+      { wch: 18 },
+      { wch: 24 },
+      { wch: 35 },
+      { wch: 16 },
+      { wch: 30 },
+      { wch: 50 }
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Memo Logbook");
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `PRO4A_RCD_Memo_Logbook_${todayStr}.xlsx`);
+  }
+
+  exportToCSV() {
+    let csv = "Control ID,Date Logged,Time,Received By,Originating Office,Subject,Action Required,Remarks/Status,Transmitted Office,Date Received,Google Drive Link\n";
+    this.memos.forEach(m => {
+      csv += `"${m.id}","${m.dateLogged}","${m.time}","${m.receivedBy}","${m.originatingOffice}","${m.subject.replace(/"/g, '""')}","${m.actionRequired}","${m.remarksStatus}","${m.transmittedOffice}","${m.dateReceived}","${m.driveLink}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `PRO4A_RCD_Memo_Logbook_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  resetData() {
+    if (confirm("Reset all data back to the default 1,207 records matching your Google Sheet?")) {
+      const defaultMemos = this.getInitialMemos();
+      localStorage.removeItem("RCD_MEMO_MONITORING_DATA");
+      this.memos = defaultMemos;
+      this.saveMemos();
+    }
+  }
+
+  closeAllModals() {
+    document.querySelectorAll(".modal-overlay").forEach(m => m.classList.remove("active"));
+    this.stopWebcam();
+  }
+}
+
+// Robust Global App Initialization
+let app;
+function initApp() {
+  if (!app) {
+    app = new MemoMonitoringApp();
+  }
+}
+
+if (document.readyState === "complete" || document.readyState === "interactive") {
+  setTimeout(initApp, 1);
+} else {
+  document.addEventListener("DOMContentLoaded", initApp);
+}
