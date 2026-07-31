@@ -144,6 +144,10 @@
           <span>📸 Multi-Page Camera</span>
         </button>
 
+        <button class="btn btn-rcd" id="btn-rcd-memo" title="Input Outgoing RCD Memo connected to RCD Control Google Sheet">
+          <span>📤 Input RCD Memo</span>
+        </button>
+
         <button class="btn btn-primary" id="btn-new-memo">
           <span>📥 Log Incoming Memo</span>
         </button>
@@ -360,10 +364,21 @@
 
       <form id="memo-form">
         <div class="modal-body">
+          <!-- RCD Sheet Banner Notice (shown when logging RCD Memo) -->
+          <div id="rcd-sheet-notice" style="display:none; background: #fffbe6; border: 1.5px solid #ffe58f; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; align-items: center; justify-content: space-between; gap: 10px;">
+            <div style="font-size:0.85rem; color:#873800; font-weight:600; display:flex; align-items:center; gap:8px;">
+              <span style="font-size:1.2rem;">📊</span>
+              <span><strong>Connected to RCD Control Sheet:</strong> Auto-assigned next vacant Control No: <strong id="rcd-vacant-badge" style="color:#d97706; font-size:0.95rem; text-decoration:underline;">ORCD-0416</strong></span>
+            </div>
+            <a href="https://docs.google.com/spreadsheets/d/166VH0J3B0kY9MBvP37x9NtV32Vsk_y0kDqfQrutRcxA/edit?gid=767216694#gid=767216694" target="_blank" class="btn btn-warning btn-sm" style="padding:4px 10px; font-size:0.78rem; text-decoration:none; white-space:nowrap;">
+              <span>Open Control Sheet ↗</span>
+            </a>
+          </div>
+
           <div class="form-grid">
             <div class="form-group">
               <label>Control / Ref No.</label>
-              <input type="text" id="form-id" required readonly style="background:#f1f5f9;" />
+              <input type="text" id="form-id" required placeholder="e.g. ORCD-1199, MEMO-2026-001" />
             </div>
 
             <div class="form-group">
@@ -383,20 +398,23 @@
 
             <div class="form-group">
               <label>Originating Office</label>
-              <select id="form-originating" required>
-                <option value="RICTMD">RICTMD</option>
-                <option value="RLRDD">RLRDD</option>
-                <option value="RPO">RPO</option>
-                <option value="RHSU">RHSU</option>
-                <option value="RCD">RCD</option>
-                <option value="RPRMD">RPRMD</option>
-                <option value="RESPO">RESPO</option>
-                <option value="DRDA">DRDA</option>
-                <option value="HEAD BAC">HEAD BAC</option>
-                <option value="RCADD">RCADD</option>
-                <option value="RIDMD">RIDMD</option>
-                <option value="RCEU 4A">RCEU 4A</option>
-              </select>
+              <input type="text" id="form-originating" list="office-suggestions" required placeholder="e.g. ROD, RCD, RID" />
+              <datalist id="office-suggestions">
+                <option value="ROD"></option>
+                <option value="RCD"></option>
+                <option value="RID"></option>
+                <option value="RICTMD"></option>
+                <option value="RLRDD"></option>
+                <option value="RPO"></option>
+                <option value="RHSU"></option>
+                <option value="RPRMD"></option>
+                <option value="RESPO"></option>
+                <option value="DRDA"></option>
+                <option value="HEAD BAC"></option>
+                <option value="RCADD"></option>
+                <option value="RIDMD"></option>
+                <option value="RCEU 4A"></option>
+              </datalist>
             </div>
 
             <div class="form-group">
@@ -427,7 +445,7 @@
 
             <div class="form-group">
               <label>Transmitted to what Office</label>
-              <input type="text" id="form-transmitted" placeholder="e.g. Concurred, Forwarded to RICTMD" />
+              <input type="text" id="form-transmitted" list="office-suggestions" placeholder="e.g. ROD, RICTMD, RID, RLRDD" />
             </div>
 
             <div class="form-group">

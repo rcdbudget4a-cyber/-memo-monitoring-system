@@ -6,6 +6,8 @@
 
 // Target Google Drive Storage Folder URL provided by User
 const TARGET_GOOGLE_DRIVE_FOLDER = "https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing";
+const TARGET_RCD_GOOGLE_SHEET = "https://docs.google.com/spreadsheets/d/166VH0J3B0kY9MBvP37x9NtV32Vsk_y0kDqfQrutRcxA/edit?gid=767216694#gid=767216694";
+const TARGET_RCD_GOOGLE_SHEET_CSV = "https://docs.google.com/spreadsheets/d/166VH0J3B0kY9MBvP37x9NtV32Vsk_y0kDqfQrutRcxA/gviz/tq?tqx=out:csv&gid=767216694";
 
 class MemoMonitoringApp {
   constructor() {
@@ -140,6 +142,7 @@ class MemoMonitoringApp {
 
     // Toolbar buttons & Card actions
     document.getElementById("btn-new-memo")?.addEventListener("click", () => this.openMemoModal());
+    document.getElementById("btn-rcd-memo")?.addEventListener("click", () => this.openRcdMemoModal());
     document.getElementById("btn-ocr-scan")?.addEventListener("click", () => this.openOcrModal());
     document.getElementById("btn-multi-camera")?.addEventListener("click", () => this.openCameraModal());
     document.getElementById("btn-export-excel")?.addEventListener("click", () => this.exportToExcel());
@@ -1018,22 +1021,97 @@ class MemoMonitoringApp {
       fileStatus.innerHTML = "";
     }
 
+    const noticeBanner = document.getElementById("rcd-sheet-notice");
+    const vacantBadge = document.getElementById("rcd-vacant-badge");
+
+    if (prefill?.isRcdOutgoing) {
+      if (noticeBanner) noticeBanner.style.display = "flex";
+      if (vacantBadge) vacantBadge.textContent = prefill.id || "ORCD-0416";
+      document.getElementById("modal-form-title").innerHTML = `<span>📤 Log Outgoing RCD Memo (Connected to RCD Control Sheet)</span>`;
+    } else {
+      if (noticeBanner) noticeBanner.style.display = "none";
+      document.getElementById("modal-form-title").innerHTML = `<span>📝 ${prefill?.id ? 'Edit Memorandum Record' : 'Log Incoming Memorandum'}</span>`;
+    }
+
     const now = new Date();
     document.getElementById("form-id").value = prefill?.id || `MEMO-2026-${String(this.memos.length + 1).padStart(3, '0')}`;
     document.getElementById("form-date").value = prefill?.dateLogged || `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
-    document.getElementById("form-time").value = prefill?.time || now.toLocaleTimeString("en-US");
-    document.getElementById("form-received-by").value = prefill?.receivedBy || "Pat Bomidor";
-    document.getElementById("form-originating").value = prefill?.originatingOffice || "RICTMD";
+    document.getElementById("form-time").value = prefill?.time || now.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
+    document.getElementById("form-received-by").value = prefill?.receivedBy !== undefined ? prefill.receivedBy : "Pat Bomidor";
+    document.getElementById("form-originating").value = prefill?.originatingOffice !== undefined ? prefill.originatingOffice : (prefill?.isRcdOutgoing ? "RCD" : "");
     document.getElementById("form-subject").value = prefill?.subject || "";
     document.getElementById("form-action").value = prefill?.actionRequired || "For Concur";
     document.getElementById("form-remarks").value = prefill?.remarksStatus || "Transmitted to";
-    document.getElementById("form-transmitted").value = prefill?.transmittedOffice || "Concurred, Forwarded to RICTMD";
+    document.getElementById("form-transmitted").value = prefill?.transmittedOffice || "";
     document.getElementById("form-date-received").value = prefill?.dateReceived || `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
     document.getElementById("form-drive-link").value = prefill?.driveLink || TARGET_GOOGLE_DRIVE_FOLDER;
     document.getElementById("form-pages").value = prefill?.pages || 1;
 
-    document.getElementById("modal-form-title").textContent = prefill?.id ? "Edit Memorandum Record" : "New Incoming/Outgoing Memo Log Entry";
     this.memoModal.classList.add("active");
+  }
+
+  async findVacantRcdControlNo() {
+    try {
+      const resp = await fetch(TARGET_RCD_GOOGLE_SHEET_CSV);
+      if (resp.ok) {
+        const text = await resp.text();
+        const lines = text.split('\n');
+        // Start scanning from Row 1968 (Cell A1968, index 1967) onwards as requested
+        const startIndex = lines.length >= 1968 ? 1967 : 0;
+        
+        for (let i = startIndex; i < lines.length; i++) {
+          const line = lines[i];
+          if (line.includes('"ORCD-') || line.includes('"A')) {
+            const parts = line.split('","').map(s => s.replace(/^"|"$/g, '').trim());
+            const ctrl = parts[0];
+            const subject = parts[4] || '';
+
+            if (ctrl && (!subject || subject === '')) {
+              if (!this.memos.some(m => m.id === ctrl)) {
+                return ctrl;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch live Google Sheet vacant control numbers:", e);
+    }
+
+    const existingOrcdNums = this.memos
+      .map(m => m.id)
+      .filter(id => /^ORCD-\d+$/i.test(id))
+      .map(id => parseInt(id.replace(/\D/g, ''), 10))
+      .filter(n => !isNaN(n));
+    
+    const maxNum = existingOrcdNums.length > 0 ? Math.max(...existingOrcdNums) : 1967;
+    return `ORCD-${String(maxNum + 1).padStart(4, '0')}`;
+  }
+
+  async openRcdMemoModal() {
+    const btn = document.getElementById("btn-rcd-memo");
+    const originalText = btn ? btn.innerHTML : "";
+    if (btn) btn.innerHTML = "<span>⏳ Finding Vacant Control No...</span>";
+
+    try {
+      const vacantCtrl = await this.findVacantRcdControlNo();
+      const now = new Date();
+      
+      this.openMemoModal({
+        id: vacantCtrl,
+        dateLogged: `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`,
+        time: now.toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
+        originatingOffice: "RCD",
+        receivedBy: "",
+        subject: "",
+        actionRequired: "For Concur",
+        remarksStatus: "Transmitted to",
+        transmittedOffice: "",
+        isRcdOutgoing: true
+      });
+    } finally {
+      if (btn) btn.innerHTML = originalText;
+    }
   }
 
   handleMemoSubmit(e) {
