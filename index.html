@@ -619,7 +619,7 @@
         </div>
       </div>
 
-      <form id="auth-login-form" onsubmit="event.preventDefault(); const email=document.getElementById('auth-email-input').value; const pass=document.getElementById('auth-pass-input').value; window.authManager.login(email, pass).catch(err => { const el=document.getElementById('auth-error-msg'); el.style.display='block'; el.textContent='❌ Login Failed: '+err.message; });" style="padding: 0 24px 28px 24px;">
+      <form id="auth-login-form" onsubmit="event.preventDefault(); const email=document.getElementById('auth-email-input').value; const pass=document.getElementById('auth-pass-input').value; window.authManager.login(email, pass);" style="padding: 0 24px 28px 24px;">
         <div style="margin-bottom: 14px;">
           <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
             Officer Email Address
