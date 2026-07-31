@@ -56,7 +56,8 @@ class MemoMonitoringApp {
     }
 
     try {
-      const memosToSync = this.memos && this.memos.length > 0 ? this.memos : this.getInitialMemos();
+      const seed = this.getInitialMemos();
+      const memosToSync = (this.memos && this.memos.length >= seed.length) ? this.memos : seed;
       let count = 0;
 
       // Firestore Batch Sync (Chunks of 400 per batch)
@@ -134,11 +135,18 @@ class MemoMonitoringApp {
   }
 
   loadMemos() {
+    let memos = [];
     if (window.storageManager) {
       const raw = window.storageManager.loadLocalMemos();
-      return raw.map(m => window.storageManager.normalizeMemo(m));
+      if (Array.isArray(raw) && raw.length > 0) {
+        memos = raw.map(m => window.storageManager.normalizeMemo(m));
+      }
     }
-    return this.getInitialMemos();
+    const seed = this.getInitialMemos();
+    if (!memos || memos.length < seed.length) {
+      memos = seed;
+    }
+    return memos;
   }
 
   saveMemos() {

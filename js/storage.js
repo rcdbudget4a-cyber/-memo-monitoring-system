@@ -21,7 +21,7 @@ class StorageManager {
       const saved = localStorage.getItem(this.LOCAL_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed) && parsed.length >= seed.length) {
           return parsed;
         }
       }
