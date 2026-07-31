@@ -107,6 +107,7 @@ class MemoMonitoringApp {
   listenFirebaseSync() {
     if (!this.db) return;
     try {
+      // Sync Memos
       this.db.collection("memos").onSnapshot((snapshot) => {
         if (snapshot && !snapshot.empty) {
           let updated = false;
@@ -126,11 +127,20 @@ class MemoMonitoringApp {
             this.saveMemos();
           }
         } else {
-          // Firestore is empty - automatically perform initial upload of all records!
           this.syncAllDataToFirebase();
         }
       }, (err) => {
         console.warn("Firebase listener notice:", err);
+      });
+
+      // Sync Universal Security Passcode across all devices
+      this.db.collection("settings").doc("security").onSnapshot((doc) => {
+        if (doc.exists && doc.data()?.passcode) {
+          const remotePass = doc.data().passcode;
+          localStorage.setItem("RCD_CUSTOM_PASSCODE", remotePass);
+        }
+      }, (err) => {
+        console.warn("Firebase security listener notice:", err);
       });
     } catch (e) {
       console.warn("Firebase sync notice:", e);
@@ -236,6 +246,14 @@ class MemoMonitoringApp {
     }
 
     localStorage.setItem("RCD_CUSTOM_PASSCODE", newVal);
+
+    if (this.db) {
+      try {
+        this.db.collection("settings").doc("security").set({ passcode: newVal }, { merge: true }).catch(() => {});
+      } catch (e) {
+        console.warn("Firebase passcode save notice:", e);
+      }
+    }
 
     if (this.changePassStatus) {
       this.changePassStatus.style.display = "block";
@@ -787,41 +805,77 @@ class MemoMonitoringApp {
     reader.readAsDataURL(file);
   }
 
-  parseAndDisplayOcrResults(ocrText) {
+  parseAndDisplayOcrResults(ocrText, capturedFile = null) {
     console.log("Extracted OCR Text:", ocrText);
     const lines = ocrText.split("\n").map(l => l.trim()).filter(Boolean);
 
     let extractedSubject = "";
-    let extractedOffice = "RICTMD";
+    let extractedOffice = "";
     let extractedDate = new Date().toLocaleDateString("en-US");
 
-    // Regex extraction rules for standard PNP Memos
+    // Comprehensive list of PNP Division/Office acronyms
+    const knownOffices = [
+      "ROD", "RCD", "RID", "RLRDD", "RICTMD", "RPHRDD", "RHRDD", "RPRAP", 
+      "RFPSSO", "ORCD", "PRSSO", "RFMD", "RCAD", "RIDO", "RMDU", "RHQ", 
+      "PRO4A", "BCPO", "PPO", "CPO", "MPS", "CPS"
+    ];
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+
+      // 1. Subject Detection
       if (/SUBJECT\s*[:\-\s]/i.test(line)) {
-        extractedSubject = line.replace(/SUBJECT\s*[:\-\s]/i, "").trim();
-        if (i + 1 < lines.length && !lines[i+1].includes(":") && lines[i+1].length > 3) {
+        extractedSubject = line.replace(/^.*?SUBJECT\s*[:\-\s]/i, "").trim();
+        if (i + 1 < lines.length && !/^(FOR|TO|FROM|DATE|MEMORANDUM)\b/i.test(lines[i+1]) && lines[i+1].length > 2) {
           extractedSubject += " " + lines[i+1];
         }
       }
-      if (/FROM\s*[:\-\s]/i.test(line) || /ORIGINATING\s*[:\-\s]/i.test(line)) {
-        const found = line.replace(/FROM\s*[:\-\s]/i, "").trim();
-        if (found.length > 2) extractedOffice = found.toUpperCase();
+
+      // 2. From / Originating Office Detection
+      if (/(FROM|ORIGINATING|OFFICE|DIVISION)\s*[:\-\s]/i.test(line)) {
+        const foundStr = line.replace(/^.*?(FROM|ORIGINATING|OFFICE|DIVISION)\s*[:\-\s]/i, "").trim().toUpperCase();
+        for (const off of knownOffices) {
+          if (foundStr.includes(off)) {
+            extractedOffice = off;
+            break;
+          }
+        }
+        if (!extractedOffice && foundStr.length >= 2) {
+          extractedOffice = foundStr.split(/\s+/)[0];
+        }
       }
+
+      // Scan anywhere in line if office not yet found
+      if (!extractedOffice) {
+        for (const off of knownOffices) {
+          if (new RegExp(`\\b${off}\\b`, 'i').test(line)) {
+            extractedOffice = off;
+            break;
+          }
+        }
+      }
+
+      // 3. Date Detection
       if (/DATE\s*[:\-\s]/i.test(line)) {
-        const foundDate = line.replace(/DATE\s*[:\-\s]/i, "").trim();
+        const foundDate = line.replace(/^.*?DATE\s*[:\-\s]/i, "").trim();
         if (foundDate.length > 4) extractedDate = foundDate;
       }
     }
 
     if (!extractedSubject) {
-      extractedSubject = lines.find(l => l.length > 15 && !l.includes("PHILIPPINE NATIONAL POLICE")) || "Request for Fund Support / Memorandum Item";
+      const candidateLine = lines.find(l => l.length > 12 && !/PHILIPPINE|POLICE|REGIONAL|HEADQUARTERS|MEMORANDUM|CALABARZON/i.test(l));
+      extractedSubject = candidateLine || "Memorandum Request / Official Document";
+    }
+
+    if (!extractedOffice) {
+      extractedOffice = "ROD";
     }
 
     document.getElementById("ocr-parsed-subject").textContent = extractedSubject;
     document.getElementById("ocr-parsed-office").textContent = extractedOffice;
     document.getElementById("ocr-parsed-date").textContent = extractedDate;
 
+    // Apply & Auto-Fill Form (Mobile & Desktop ready)
     document.getElementById("btn-apply-ocr").onclick = () => {
       this.closeAllModals();
       this.openMemoModal({
@@ -829,25 +883,33 @@ class MemoMonitoringApp {
         originatingOffice: extractedOffice,
         dateLogged: extractedDate
       });
+      if (capturedFile) {
+        this.handleFormFileUpload(capturedFile);
+      }
     };
   }
 
-  simulateOcrParsing(filename) {
+  simulateOcrParsing(filename, capturedFile = null) {
     const nameWithoutExt = filename.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
     const subject = `Request for ${nameWithoutExt.charAt(0).toUpperCase() + nameWithoutExt.slice(1)}`;
     const now = new Date().toLocaleDateString("en-US");
+    const sampleOffices = ["ROD", "RCD", "RID", "RLRDD", "RICTMD", "RPHRDD"];
+    const detectedOffice = sampleOffices[Math.floor(Math.random() * sampleOffices.length)];
 
     document.getElementById("ocr-parsed-subject").textContent = subject;
-    document.getElementById("ocr-parsed-office").textContent = "RLRDD";
+    document.getElementById("ocr-parsed-office").textContent = detectedOffice;
     document.getElementById("ocr-parsed-date").textContent = now;
 
     document.getElementById("btn-apply-ocr").onclick = () => {
       this.closeAllModals();
       this.openMemoModal({
         subject: subject,
-        originatingOffice: "RLRDD",
+        originatingOffice: detectedOffice,
         dateLogged: now
       });
+      if (capturedFile) {
+        this.handleFormFileUpload(capturedFile);
+      }
     };
   }
 
