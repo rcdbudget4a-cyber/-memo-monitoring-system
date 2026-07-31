@@ -24,12 +24,117 @@ class MemoMonitoringApp {
     this.webcamStream = null;
 
     this.initElements();
+    this.initFirebase();
     this.checkSecurityAuth();
     this.populateOfficeFilter();
     this.bindEvents();
     this.startClock();
     this.renderStats();
     this.renderTable();
+  }
+
+  initFirebase() {
+    if (typeof firebase === "undefined") return;
+
+    // Firebase Console Project: incoming-outgoing-memo
+    const firebaseConfig = {
+      apiKey: "AIzaSyC04xaukwxDG9-Hn8B1vwZVuaQrvb9zH1k",
+      authDomain: "incoming-outgoing-memo.firebaseapp.com",
+      projectId: "incoming-outgoing-memo",
+      storageBucket: "incoming-outgoing-memo.firebasestorage.app",
+      messagingSenderId: "985454161101",
+      appId: "1:985454161101:web:95da4973e0cc72b574cd84",
+      measurementId: "G-34W97S6RBW"
+    };
+
+    try {
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      this.db = firebase.firestore();
+      this.listenFirebaseSync();
+    } catch (e) {
+      console.warn("Firebase Cloud Database notice:", e);
+    }
+  }
+
+  async syncAllDataToFirebase() {
+    if (!this.db) {
+      alert("⚠️ Firebase Database is not connected.\nPlease check your internet connection.");
+      return;
+    }
+
+    const btn = document.getElementById("btn-sync-firebase");
+    const originalHtml = btn ? btn.innerHTML : "";
+    if (btn) btn.innerHTML = "<span>⏳ Syncing Records to Firebase...</span>";
+
+    try {
+      const memosToSync = this.memos && this.memos.length > 0 ? this.memos : this.getInitialMemos();
+      let count = 0;
+
+      // Firestore Batch Sync (Chunks of 400 per batch)
+      for (let i = 0; i < memosToSync.length; i += 400) {
+        const chunk = memosToSync.slice(i, i + 400);
+        const batch = this.db.batch();
+
+        chunk.forEach(memo => {
+          if (memo && memo.id) {
+            const cleanMemo = { ...memo };
+            if (cleanMemo.fileData && cleanMemo.fileData.length > 500000) {
+              delete cleanMemo.fileData;
+            }
+            Object.keys(cleanMemo).forEach(key => {
+              if (cleanMemo[key] === undefined) cleanMemo[key] = "";
+            });
+            const docRef = this.db.collection("memos").doc(String(cleanMemo.id));
+            batch.set(docRef, cleanMemo, { merge: true });
+            count++;
+          }
+        });
+
+        await batch.commit();
+      }
+
+      alert(`✅ SUCCESS!\nSynced ${count} Memorandum records directly to your Firebase Firestore Database ("incoming-outgoing-memo").`);
+    } catch (err) {
+      console.error("Firebase sync error:", err);
+      alert(`⚠️ Firebase Sync Notice:\n${err.message}\n\nMake sure Firestore Database is created in your Firebase Console (incoming-outgoing-memo) and Security Rules are set to test mode.`);
+    } finally {
+      if (btn) btn.innerHTML = originalHtml;
+    }
+  }
+
+  listenFirebaseSync() {
+    if (!this.db) return;
+    try {
+      this.db.collection("memos").onSnapshot((snapshot) => {
+        if (snapshot && !snapshot.empty) {
+          let updated = false;
+          snapshot.forEach((doc) => {
+            const remoteMemo = doc.data();
+            if (remoteMemo && remoteMemo.id) {
+              const idx = this.memos.findIndex(m => m.id === remoteMemo.id);
+              if (idx >= 0) {
+                this.memos[idx] = { ...this.memos[idx], ...remoteMemo };
+              } else {
+                this.memos.unshift(remoteMemo);
+                updated = true;
+              }
+            }
+          });
+          if (updated) {
+            this.saveMemos();
+          }
+        } else {
+          // Firestore is empty - automatically perform initial upload of all records!
+          this.syncAllDataToFirebase();
+        }
+      }, (err) => {
+        console.warn("Firebase listener notice:", err);
+      });
+    } catch (e) {
+      console.warn("Firebase sync notice:", e);
+    }
   }
 
   checkSecurityAuth() {
@@ -182,10 +287,30 @@ class MemoMonitoringApp {
 
   saveMemos() {
     try {
-      localStorage.setItem("RCD_MEMO_MONITORING_DATA", JSON.stringify(this.memos));
+      // Strip very large base64 fileData when writing to localStorage to prevent QuotaExceededError
+      const cleanMemos = this.memos.map(m => {
+        const copy = { ...m };
+        if (copy.fileData && copy.fileData.length > 500000) {
+          delete copy.fileData;
+        }
+        return copy;
+      });
+      localStorage.setItem("RCD_MEMO_MONITORING_DATA", JSON.stringify(cleanMemos));
     } catch (e) {
       console.warn("LocalStorage save warning", e);
     }
+
+    if (this.db) {
+      try {
+        const latestMemos = this.memos.slice(0, 100);
+        latestMemos.forEach(memo => {
+          this.db.collection("memos").doc(memo.id).set(memo, { merge: true }).catch(() => {});
+        });
+      } catch (e) {
+        console.warn("Firebase Cloud Sync warning", e);
+      }
+    }
+
     this.populateOfficeFilter();
     this.renderStats();
     this.renderTable();
@@ -286,6 +411,7 @@ class MemoMonitoringApp {
     document.getElementById("btn-multi-camera")?.addEventListener("click", () => this.openCameraModal());
     document.getElementById("btn-export-excel")?.addEventListener("click", () => this.exportToExcel());
     document.getElementById("btn-print-journal")?.addEventListener("click", () => this.openJournalModal());
+    document.getElementById("btn-sync-firebase")?.addEventListener("click", () => this.syncAllDataToFirebase());
 
     if (this.journalSetupForm) {
       this.journalSetupForm.addEventListener("submit", (e) => this.handleJournalSetupSubmit(e));
@@ -1268,49 +1394,14 @@ class MemoMonitoringApp {
     }
   }
 
-  async handleMemoSubmit(e) {
+  handleMemoSubmit(e) {
     e.preventDefault();
     const id = document.getElementById("form-id").value;
     const existingIdx = this.memos.findIndex(m => m.id === id);
-    const saveBtn = document.querySelector("#memo-form button[type='submit']");
-    const originalBtnHtml = saveBtn ? saveBtn.innerHTML : "";
 
     let driveLinkValue = document.getElementById("form-drive-link").value;
-
-    const scriptUrl = localStorage.getItem("RCD_DRIVE_SCRIPT_URL") || DEFAULT_GOOGLE_DRIVE_SCRIPT_URL;
-    if (this.currentUploadedFileData && scriptUrl) {
-      if (saveBtn) saveBtn.innerHTML = "<span>☁️ Uploading PDF to Google Drive...</span>";
-      try {
-        const parts = this.currentUploadedFileData.split(',');
-        const mimeMatch = parts[0].match(/:(.*?);/);
-        const mime = mimeMatch ? mimeMatch[1] : "application/pdf";
-        const base64Data = parts[1];
-
-        const payload = {
-          fileName: `${id}_${this.currentUploadedFile ? this.currentUploadedFile.name : 'memo.pdf'}`,
-          contentType: mime,
-          base64: base64Data
-        };
-
-        const resp = await fetch(scriptUrl, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(payload),
-          redirect: "follow"
-        });
-
-        if (resp.ok) {
-          const resJson = await resp.json();
-          if (resJson.fileUrl) {
-            driveLinkValue = resJson.fileUrl;
-          }
-        }
-      } catch (err) {
-        console.warn("Google Drive background upload error:", err);
-      } finally {
-        if (saveBtn) saveBtn.innerHTML = originalBtnHtml;
-      }
-    }
+    const fileDataVal = this.currentUploadedFileData ? this.currentUploadedFileData : (existingIdx >= 0 ? this.memos[existingIdx].fileData : null);
+    const fileNameVal = this.currentUploadedFile ? this.currentUploadedFile.name : (existingIdx >= 0 ? this.memos[existingIdx].fileName : "");
 
     const memoData = {
       id: id,
@@ -1324,8 +1415,8 @@ class MemoMonitoringApp {
       transmittedOffice: document.getElementById("form-transmitted").value,
       dateReceived: document.getElementById("form-date-received").value,
       driveLink: driveLinkValue,
-      fileName: this.currentUploadedFile ? this.currentUploadedFile.name : (existingIdx >= 0 ? this.memos[existingIdx].fileName : ""),
-      fileData: this.currentUploadedFileData ? this.currentUploadedFileData : (existingIdx >= 0 ? this.memos[existingIdx].fileData : null),
+      fileName: fileNameVal,
+      fileData: fileDataVal,
       pages: parseInt(document.getElementById("form-pages").value) || 1
     };
 
@@ -1337,6 +1428,49 @@ class MemoMonitoringApp {
 
     this.saveMemos();
     this.closeAllModals();
+
+    // Non-blocking background Google Drive Upload
+    const scriptUrl = localStorage.getItem("RCD_DRIVE_SCRIPT_URL") || DEFAULT_GOOGLE_DRIVE_SCRIPT_URL;
+    if (this.currentUploadedFileData && scriptUrl) {
+      const uploadData = this.currentUploadedFileData;
+      const uploadFileName = fileNameVal;
+      const memoId = id;
+
+      setTimeout(async () => {
+        try {
+          const parts = uploadData.split(',');
+          const mimeMatch = parts[0].match(/:(.*?);/);
+          const mime = mimeMatch ? mimeMatch[1] : "application/pdf";
+          const base64Data = parts[1];
+
+          const payload = {
+            fileName: `${memoId}_${uploadFileName || 'memo.pdf'}`,
+            contentType: mime,
+            base64: base64Data
+          };
+
+          const resp = await fetch(scriptUrl, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload),
+            redirect: "follow"
+          });
+
+          if (resp.ok) {
+            const resJson = await resp.json();
+            if (resJson.fileUrl) {
+              const targetMemo = this.memos.find(m => m.id === memoId);
+              if (targetMemo) {
+                targetMemo.driveLink = resJson.fileUrl;
+                this.saveMemos();
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("Background Google Drive upload notice:", err);
+        }
+      }, 50);
+    }
   }
 
   viewAttachedFile(id) {
