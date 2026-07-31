@@ -8,6 +8,7 @@
 const TARGET_GOOGLE_DRIVE_FOLDER = "https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing";
 const TARGET_RCD_GOOGLE_SHEET = "https://docs.google.com/spreadsheets/d/166VH0J3B0kY9MBvP37x9NtV32Vsk_y0kDqfQrutRcxA/edit?gid=767216694#gid=767216694";
 const TARGET_RCD_GOOGLE_SHEET_CSV = "https://docs.google.com/spreadsheets/d/166VH0J3B0kY9MBvP37x9NtV32Vsk_y0kDqfQrutRcxA/gviz/tq?tqx=out:csv&gid=767216694";
+const DEFAULT_GOOGLE_DRIVE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvhr0U3IWOhOLYLdWZFSRL-Q8otNf4gTPSkBgsD82CrNPJ9xowvuMsUgFLSNAsvAPIUg/exec";
 
 class MemoMonitoringApp {
   constructor() {
@@ -60,15 +61,12 @@ class MemoMonitoringApp {
     const inputPass = this.lockInput?.value ? this.lockInput.value.trim() : "";
     const customPass = localStorage.getItem("RCD_CUSTOM_PASSCODE");
 
-    const validPasscodes = [
-      "PRO4A2026",
-      "RCD2026",
-      "RCD4A",
-      "PRO4A",
-      customPass
-    ].filter(Boolean);
+    // If custom passcode exists, ONLY customPass is valid. Otherwise fallback to default PRO4A2026
+    const activePasscodes = customPass 
+      ? [customPass] 
+      : ["PRO4A2026", "RCD2026", "RCD4A", "PRO4A"];
 
-    if (validPasscodes.some(p => p.toLowerCase() === inputPass.toLowerCase())) {
+    if (activePasscodes.some(p => p === inputPass || p.toLowerCase() === inputPass.toLowerCase())) {
       sessionStorage.setItem("RCD_MEMO_AUTHENTICATED", "true");
       if (this.lockError) this.lockError.style.display = "none";
       if (this.lockModal) this.lockModal.classList.remove("active");
@@ -96,15 +94,11 @@ class MemoMonitoringApp {
     const confirmVal = this.passConfirmInput?.value ? this.passConfirmInput.value.trim() : "";
 
     const activeCustom = localStorage.getItem("RCD_CUSTOM_PASSCODE");
-    const validCurrentPasscodes = [
-      "PRO4A2026",
-      "RCD2026",
-      "RCD4A",
-      "PRO4A",
-      activeCustom
-    ].filter(Boolean);
+    const activePasscodes = activeCustom 
+      ? [activeCustom] 
+      : ["PRO4A2026", "RCD2026", "RCD4A", "PRO4A"];
 
-    const isCurrentValid = validCurrentPasscodes.some(p => p.toLowerCase() === currVal.toLowerCase());
+    const isCurrentValid = activePasscodes.some(p => p === currVal || p.toLowerCase() === currVal.toLowerCase());
 
     if (!isCurrentValid) {
       if (this.changePassStatus) {
@@ -567,12 +561,20 @@ class MemoMonitoringApp {
         <td><strong>${memo.transmittedOffice || 'Pending Release'}</strong></td>
         <td class="cell-date">${memo.dateReceived || memo.dateLogged}</td>
         <td>
-          ${memo.driveLink ? `
-            <a href="${memo.driveLink}" target="_blank" class="drive-link-btn" title="Open Document in Google Drive">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-              ${memo.fileName ? (memo.fileName.toLowerCase().endsWith('.pdf') ? '📄 PDF File' : '🖼️ Image File') : 'View Drive Doc'}
-            </a>
-          ` : '<span style="color:#94a3b8; font-style:italic;">No File</span>'}
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            ${memo.fileData || memo.fileName ? `
+              <button class="btn btn-primary btn-sm" onclick="app.viewAttachedFile('${memo.id}')" style="padding:4px 8px; font-size:0.75rem; justify-content:center;" title="Click to View Uploaded Document File">
+                ${memo.fileName && memo.fileName.toLowerCase().endsWith('.pdf') ? '📄 View PDF File' : '🖼️ View Attached File'}
+              </button>
+            ` : ''}
+            ${memo.driveLink ? `
+              <a href="${memo.driveLink}" target="_blank" class="drive-link-btn" style="font-size:0.72rem; padding:2px 6px;" title="Open Target Google Drive Folder">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                <span>Google Drive Folder ↗</span>
+              </a>
+            ` : ''}
+            ${!memo.fileData && !memo.fileName && !memo.driveLink ? '<span style="color:#94a3b8; font-style:italic;">No File</span>' : ''}
+          </div>
           <div class="table-actions" style="margin-top:4px;">
             <button class="icon-btn" onclick="app.printRoutingSlip('${memo.id}')" title="Print Routing Slip">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
@@ -901,6 +903,12 @@ class MemoMonitoringApp {
       return;
     }
 
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      this.currentUploadedFileData = e.target.result;
+    };
+    reader.readAsDataURL(file);
+
     this.currentUploadedFile = file;
     const statusBox = document.getElementById("form-file-status");
     const fileLabel = document.getElementById("form-file-label");
@@ -1157,6 +1165,7 @@ class MemoMonitoringApp {
     this.closeAllModals();
     this.memoForm.reset();
     this.currentUploadedFile = null;
+    this.currentUploadedFileData = prefill?.fileData || null;
 
     const fileLabel = document.getElementById("form-file-label");
     const fileStatus = document.getElementById("form-file-status");
@@ -1259,10 +1268,47 @@ class MemoMonitoringApp {
     }
   }
 
-  handleMemoSubmit(e) {
+  async handleMemoSubmit(e) {
     e.preventDefault();
     const id = document.getElementById("form-id").value;
     const existingIdx = this.memos.findIndex(m => m.id === id);
+    const saveBtn = document.querySelector("#memo-form button[type='submit']");
+    const originalBtnHtml = saveBtn ? saveBtn.innerHTML : "";
+
+    let driveLinkValue = document.getElementById("form-drive-link").value;
+
+    const scriptUrl = localStorage.getItem("RCD_DRIVE_SCRIPT_URL") || DEFAULT_GOOGLE_DRIVE_SCRIPT_URL;
+    if (this.currentUploadedFileData && scriptUrl) {
+      if (saveBtn) saveBtn.innerHTML = "<span>☁️ Uploading PDF to Google Drive...</span>";
+      try {
+        const parts = this.currentUploadedFileData.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : "application/pdf";
+        const base64Data = parts[1];
+
+        const payload = {
+          fileName: `${id}_${this.currentUploadedFile ? this.currentUploadedFile.name : 'memo.pdf'}`,
+          contentType: mime,
+          base64: base64Data
+        };
+
+        const resp = await fetch(scriptUrl, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+
+        if (resp.ok) {
+          const resJson = await resp.json();
+          if (resJson.fileUrl) {
+            driveLinkValue = resJson.fileUrl;
+          }
+        }
+      } catch (err) {
+        console.warn("Google Drive background upload error:", err);
+      } finally {
+        if (saveBtn) saveBtn.innerHTML = originalBtnHtml;
+      }
+    }
 
     const memoData = {
       id: id,
@@ -1275,8 +1321,9 @@ class MemoMonitoringApp {
       remarksStatus: document.getElementById("form-remarks").value,
       transmittedOffice: document.getElementById("form-transmitted").value,
       dateReceived: document.getElementById("form-date-received").value,
-      driveLink: document.getElementById("form-drive-link").value,
+      driveLink: driveLinkValue,
       fileName: this.currentUploadedFile ? this.currentUploadedFile.name : (existingIdx >= 0 ? this.memos[existingIdx].fileName : ""),
+      fileData: this.currentUploadedFileData ? this.currentUploadedFileData : (existingIdx >= 0 ? this.memos[existingIdx].fileData : null),
       pages: parseInt(document.getElementById("form-pages").value) || 1
     };
 
@@ -1288,6 +1335,37 @@ class MemoMonitoringApp {
 
     this.saveMemos();
     this.closeAllModals();
+  }
+
+  viewAttachedFile(id) {
+    const memo = this.memos.find(m => m.id === id);
+    if (!memo) return;
+
+    if (memo.fileData) {
+      try {
+        const parts = memo.fileData.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        const blob = new Blob([u8arr], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+        return;
+      } catch (e) {
+        console.warn("Could not create Blob URL, fallback to raw data URL window", e);
+        window.open(memo.fileData, '_blank');
+        return;
+      }
+    }
+
+    if (memo.driveLink) {
+      window.open(memo.driveLink, '_blank');
+    }
   }
 
   editMemo(id) {
