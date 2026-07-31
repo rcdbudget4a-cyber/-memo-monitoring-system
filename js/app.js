@@ -1294,7 +1294,9 @@ class MemoMonitoringApp {
 
         const resp = await fetch(scriptUrl, {
           method: "POST",
-          body: JSON.stringify(payload)
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload),
+          redirect: "follow"
         });
 
         if (resp.ok) {
