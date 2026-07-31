@@ -363,6 +363,7 @@ class MemoMonitoringApp {
     this.journalModal = document.getElementById("journal-modal");
     this.journalPreviewModal = document.getElementById("journal-preview-modal");
     this.journalSetupForm = document.getElementById("journal-setup-form");
+    this.pdfViewerModal = document.getElementById("pdf-viewer-modal");
 
     // Security Lock Screen
     this.lockModal = document.getElementById("lock-modal");
@@ -1539,26 +1540,76 @@ class MemoMonitoringApp {
     const memo = this.memos.find(m => m.id === id);
     if (!memo) return;
 
+    const modal = document.getElementById("pdf-viewer-modal");
+    const titleEl = document.getElementById("pdf-viewer-title");
+    const bodyEl = document.getElementById("pdf-viewer-body");
+    const driveBtn = document.getElementById("pdf-viewer-drive-btn");
+
+    const fileName = memo.fileName || `${memo.id}.pdf`;
+    if (titleEl) titleEl.textContent = `📄 Document Viewer: ${fileName} (${memo.id})`;
+
+    if (driveBtn) {
+      if (memo.driveLink && memo.driveLink.includes("/file/d/")) {
+        driveBtn.href = memo.driveLink;
+        driveBtn.style.display = "inline-flex";
+      } else if (memo.fileName) {
+        driveBtn.href = `https://drive.google.com/drive/search?q=${encodeURIComponent(memo.fileName)}`;
+        driveBtn.style.display = "inline-flex";
+      } else {
+        driveBtn.href = memo.driveLink || TARGET_GOOGLE_DRIVE_FOLDER;
+        driveBtn.style.display = "inline-flex";
+      }
+    }
+
+    // 1. If fileData exists, render exact PDF or Image inside Document Viewer Modal
     if (memo.fileData) {
+      let fileUrl = memo.fileData;
       try {
-        const parts = memo.fileData.split(',');
-        const mimeMatch = parts[0].match(/:(.*?);/);
-        const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
-        const bstr = atob(parts[1]);
-        let n = bstr.length;
-        const u8arr = new Uint8Array(n);
-        while (n--) {
-          u8arr[n] = bstr.charCodeAt(n);
+        if (memo.fileData.startsWith("data:")) {
+          const parts = memo.fileData.split(',');
+          const mimeMatch = parts[0].match(/:(.*?);/);
+          const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+          const bstr = atob(parts[1]);
+          let n = bstr.length;
+          const u8arr = new Uint8Array(n);
+          while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+          }
+          const blob = new Blob([u8arr], { type: mime });
+          fileUrl = URL.createObjectURL(blob);
         }
-        const blob = new Blob([u8arr], { type: mime });
-        const blobUrl = URL.createObjectURL(blob);
-        window.open(blobUrl, '_blank');
-        return;
       } catch (e) {
-        console.warn("Could not create Blob URL, fallback to raw data URL window", e);
-        window.open(memo.fileData, '_blank');
+        fileUrl = memo.fileData;
+      }
+
+      if (bodyEl) {
+        const isPdf = fileName.toLowerCase().endsWith(".pdf") || memo.fileData.includes("pdf");
+        if (isPdf) {
+          bodyEl.innerHTML = `<iframe src="${fileUrl}" style="width:100%; height:100%; border:none; background:#ffffff;" title="PDF Viewer"></iframe>`;
+        } else {
+          bodyEl.innerHTML = `<img src="${fileUrl}" alt="Attached Document" style="max-width:100%; max-height:100%; object-fit:contain;" />`;
+        }
+      }
+
+      if (modal) {
+        this.closeAllModals();
+        modal.classList.add("active");
         return;
       }
+      window.open(fileUrl, '_blank');
+      return;
+    }
+
+    // 2. If direct Google Drive File URL exists (e.g. /file/d/...), open direct file URL
+    if (memo.driveLink && memo.driveLink.includes("/file/d/")) {
+      window.open(memo.driveLink, '_blank');
+      return;
+    }
+
+    // 3. Fallback: Search exact filename in Google Drive so officer sees the exact PDF file
+    if (memo.fileName) {
+      window.open(`https://drive.google.com/drive/search?q=${encodeURIComponent(memo.fileName)}`, '_blank');
+      return;
     }
 
     if (memo.driveLink) {

@@ -683,6 +683,29 @@
     </div>
   </div>
 
+  <!-- MODAL: Fullscreen Document PDF / Image Viewer Modal -->
+  <div class="modal-overlay" id="pdf-viewer-modal">
+    <div class="modal-card" style="max-width: 920px; width: 95vw; height: 90vh; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 12px 18px; flex-shrink: 0;">
+        <div class="modal-title">
+          <span id="pdf-viewer-title" style="color: #ffffff; font-size: 0.95rem;">📄 Document Viewer</span>
+        </div>
+        <button class="modal-close" style="color: #ffffff;">&times;</button>
+      </div>
+
+      <div class="modal-body" style="flex: 1; padding: 0; overflow: hidden; background: #1e293b; display: flex; align-items: center; justify-content: center;" id="pdf-viewer-body">
+        <!-- Embedded PDF iframe / image element -->
+      </div>
+
+      <div class="modal-footer" style="flex-shrink: 0; background: #0f172a; border-top: 1px solid rgba(255,255,255,0.1); padding: 10px 16px; justify-content: space-between;">
+        <a id="pdf-viewer-drive-btn" href="#" target="_blank" class="btn btn-outline btn-sm" style="color: #60a5fa; border-color: #60a5fa; font-weight: 700;">
+          <span>☁️ Open in Google Drive ↗</span>
+        </a>
+        <button type="button" class="btn btn-primary btn-sm btn-cancel">Close Viewer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Firebase Cloud Database SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
