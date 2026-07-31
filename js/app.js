@@ -171,6 +171,31 @@ class MemoMonitoringApp {
     this.renderTable();
   }
 
+  populateOfficeFilter() {
+    if (!this.officeFilter) return;
+
+    const offices = new Set();
+    if (Array.isArray(this.memos)) {
+      this.memos.forEach(m => {
+        if (m && m.originatingOffice && m.originatingOffice.trim()) {
+          offices.add(m.originatingOffice.trim());
+        }
+      });
+    }
+
+    const sortedOffices = Array.from(offices).sort();
+    let html = `<option value="ALL">All Originating Offices</option>`;
+    sortedOffices.forEach(off => {
+      html += `<option value="${off}">${off}</option>`;
+    });
+
+    const currentValue = this.officeFilter ? this.officeFilter.value : "ALL";
+    this.officeFilter.innerHTML = html;
+    if (currentValue && sortedOffices.includes(currentValue)) {
+      this.officeFilter.value = currentValue;
+    }
+  }
+
   initElements() {
     this.clockEl = document.getElementById("live-clock");
     this.searchInput = document.getElementById("search-input");
@@ -223,6 +248,25 @@ class MemoMonitoringApp {
     this.videoEl = document.getElementById("camera-video");
     this.canvasEl = document.getElementById("camera-canvas");
     this.snapGallery = document.getElementById("snap-gallery");
+
+    // Load custom credentials if set by user
+    const customEmail = localStorage.getItem("RCD_CUSTOM_AUTH_EMAIL");
+    const customPass = localStorage.getItem("RCD_CUSTOM_AUTH_PASS");
+    if (customEmail) {
+      const authEmailInput = document.getElementById("auth-email-input");
+      if (authEmailInput) authEmailInput.value = customEmail;
+      if (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_AUTH) window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_EMAIL = customEmail;
+    }
+    if (customPass) {
+      const authPassInput = document.getElementById("auth-pass-input");
+      if (authPassInput) authPassInput.value = customPass;
+      if (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_AUTH) {
+        window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_PASSWORD = customPass;
+        if (!window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.includes(customPass)) {
+          window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.push(customPass);
+        }
+      }
+    }
   }
 
   bindEvents() {
@@ -420,13 +464,75 @@ class MemoMonitoringApp {
           this.handleFormFileUpload(e.target.files[0]);
         }
       });
+    }
+
     // Soft Delete Form Submit
     document.getElementById("soft-delete-form")?.addEventListener("submit", (e) => this.handleSoftDeleteSubmit(e));
+
+    // Change Credentials Form Submit
+    document.getElementById("change-credentials-form")?.addEventListener("submit", (e) => this.handleChangeCredentialsSubmit(e));
 
     // Modal Closes
     document.querySelectorAll(".modal-close, .btn-cancel").forEach((btn) => {
       btn.addEventListener("click", () => this.closeAllModals());
     });
+  }
+
+  openChangeCredentialsModal() {
+    this.closeAllModals();
+    const modal = document.getElementById("change-credentials-modal");
+    const currentEmail = localStorage.getItem("RCD_CUSTOM_AUTH_EMAIL") || window.APP_CONFIG?.DEFAULT_AUTH?.DEFAULT_EMAIL || "duty.pnco@pro4a.pnp.gov.ph";
+    const currentPass = localStorage.getItem("RCD_CUSTOM_AUTH_PASS") || window.APP_CONFIG?.DEFAULT_AUTH?.DEFAULT_PASSWORD || "PRO4A@2026";
+
+    const emailInput = document.getElementById("cred-new-email");
+    const passInput = document.getElementById("cred-new-pass");
+    const confirmInput = document.getElementById("cred-confirm-pass");
+
+    if (emailInput) emailInput.value = currentEmail;
+    if (passInput) passInput.value = currentPass;
+    if (confirmInput) confirmInput.value = currentPass;
+
+    if (modal) modal.classList.add("active");
+  }
+
+  handleChangeCredentialsSubmit(e) {
+    if (e) e.preventDefault();
+    const newEmail = document.getElementById("cred-new-email").value.trim();
+    const newPass = document.getElementById("cred-new-pass").value.trim();
+    const confirmPass = document.getElementById("cred-confirm-pass").value.trim();
+
+    if (!newEmail || !newPass) {
+      if (window.uiManager) window.uiManager.showToast("Email and password cannot be empty.", "error");
+      return;
+    }
+
+    if (newPass !== confirmPass) {
+      if (window.uiManager) window.uiManager.showToast("Passwords do not match. Please verify.", "error");
+      return;
+    }
+
+    // Save custom credentials in localStorage & update APP_CONFIG
+    localStorage.setItem("RCD_CUSTOM_AUTH_EMAIL", newEmail);
+    localStorage.setItem("RCD_CUSTOM_AUTH_PASS", newPass);
+
+    if (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_AUTH) {
+      window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_EMAIL = newEmail;
+      window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_PASSWORD = newPass;
+      if (!window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.includes(newPass)) {
+        window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.push(newPass);
+      }
+    }
+
+    // Update login form prefill inputs
+    const authEmailInput = document.getElementById("auth-email-input");
+    const authPassInput = document.getElementById("auth-pass-input");
+    if (authEmailInput) authEmailInput.value = newEmail;
+    if (authPassInput) authPassInput.value = newPass;
+
+    this.closeAllModals();
+    if (window.uiManager) {
+      window.uiManager.showToast(`✅ Credentials updated! New email: ${newEmail}`, "success");
+    }
   }
 
   startClock() {

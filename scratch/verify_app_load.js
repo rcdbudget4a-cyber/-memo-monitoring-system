@@ -1,23 +1,32 @@
 global.window = global;
+global.document = {
+  getElementById: (id) => ({ addEventListener: () => {}, innerHTML: '', value: 'ALL', style: {}, classList: { add: () => {}, remove: () => {} }, appendChild: () => {} }),
+  querySelectorAll: () => [],
+  addEventListener: () => {},
+  createElement: () => ({ setAttribute: () => {}, addEventListener: () => {}, appendChild: () => {}, style: {}, classList: { add: () => {}, remove: () => {} } })
+};
 global.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 global.sessionStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-global.APP_CONFIG = { SCHEMA_VERSION: 2 };
+global.APP_CONFIG = { SCHEMA_VERSION: 2, ROLES: { ADMIN: "admin" } };
+
 const fs = require('fs');
 
-try {
-  const dataContent = fs.readFileSync('./js/memos_data.js', 'utf8');
-  eval(dataContent);
-  console.log("INITIAL_MEMOS count loaded:", typeof INITIAL_MEMOS !== 'undefined' ? INITIAL_MEMOS.length : 0);
+const codeData = fs.readFileSync('./js/memos_data.js', 'utf8');
+const codeStorage = fs.readFileSync('./js/storage.js', 'utf8');
+const codeAging = fs.readFileSync('./js/aging.js', 'utf8');
+const codeApp = fs.readFileSync('./js/app.js', 'utf8');
 
-  const storageContent = fs.readFileSync('./js/storage.js', 'utf8');
-  eval(storageContent);
-  console.log("StorageManager loaded:", typeof StorageManager !== 'undefined');
+eval(codeData);
+eval(codeStorage);
+eval(codeAging);
+eval(codeApp + "; global.MemoMonitoringApp = MemoMonitoringApp;");
 
-  const agingContent = fs.readFileSync('./js/aging.js', 'utf8');
-  eval(agingContent);
-  console.log("AgingManager loaded:", typeof AgingManager !== 'undefined');
+const testApp = new MemoMonitoringApp();
+console.log("MemoMonitoringApp successfully created!");
+console.log("Active memos count in testApp:", testApp.memos.length);
 
-  console.log("SUCCESS: All modular JS scripts compile cleanly without any syntax or runtime errors!");
-} catch (e) {
-  console.error("ERROR in script execution:", e);
+if (testApp.memos.length === 1210) {
+  console.log("SUCCESS: Exactly 1,210 memorandum records loaded!");
+} else {
+  console.error("FAILURE: Memos count mismatch!", testApp.memos.length);
 }

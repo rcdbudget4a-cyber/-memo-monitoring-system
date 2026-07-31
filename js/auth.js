@@ -78,9 +78,10 @@ class AuthManager {
   }
 
   getDefaultProfile(email, displayName) {
+    const defaultEmail = window.APP_CONFIG?.DEFAULT_AUTH?.DEFAULT_EMAIL || "duty.pnco@pro4a.pnp.gov.ph";
     return {
       displayName: displayName || (email ? email.split("@")[0].toUpperCase() : "Duty PNCO"),
-      email: email || "duty.pnco@pro4a.pnp.gov.ph",
+      email: email || defaultEmail,
       role: "records_admin",
       section: "RCD",
       active: true
@@ -88,7 +89,8 @@ class AuthManager {
   }
 
   async login(email, password) {
-    const cleanEmail = email ? email.trim() : "duty.pnco@pro4a.pnp.gov.ph";
+    const defaultEmail = window.APP_CONFIG?.DEFAULT_AUTH?.DEFAULT_EMAIL || "duty.pnco@pro4a.pnp.gov.ph";
+    const cleanEmail = email ? email.trim() : defaultEmail;
     const cleanPass = password ? password.trim() : "";
 
     // Instantly set authenticated state so user is never blocked
