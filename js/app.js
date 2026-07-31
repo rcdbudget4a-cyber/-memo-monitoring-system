@@ -238,20 +238,26 @@ class MemoMonitoringApp {
     }
 
     // Search & Filter
-    this.searchInput.addEventListener("input", (e) => {
-      this.currentSearchTerm = e.target.value.toLowerCase();
-      this.renderTable();
-    });
+    if (this.searchInput) {
+      this.searchInput.addEventListener("input", (e) => {
+        this.currentSearchTerm = e.target.value.toLowerCase();
+        this.renderTable();
+      });
+    }
 
-    this.officeFilter.addEventListener("change", (e) => {
-      this.currentFilterOffice = e.target.value;
-      this.renderTable();
-    });
+    if (this.officeFilter) {
+      this.officeFilter.addEventListener("change", (e) => {
+        this.currentFilterOffice = e.target.value;
+        this.renderTable();
+      });
+    }
 
-    this.statusFilter.addEventListener("change", (e) => {
-      this.currentFilterStatus = e.target.value;
-      this.renderTable();
-    });
+    if (this.statusFilter) {
+      this.statusFilter.addEventListener("change", (e) => {
+        this.currentFilterStatus = e.target.value;
+        this.renderTable();
+      });
+    }
 
     if (this.sortOrderSelect) {
       this.sortOrderSelect.addEventListener("change", (e) => {
@@ -351,7 +357,9 @@ class MemoMonitoringApp {
     });
 
     // Form Submit
-    this.memoForm.addEventListener("submit", (e) => this.handleMemoSubmit(e));
+    if (this.memoForm) {
+      this.memoForm.addEventListener("submit", (e) => this.handleMemoSubmit(e));
+    }
 
     // OCR Dropzone & File Input
     const dropzone = document.getElementById("ocr-dropzone");
@@ -412,12 +420,6 @@ class MemoMonitoringApp {
           this.handleFormFileUpload(e.target.files[0]);
         }
       });
-    }
-
-    // Multi-page Snap & Upload
-    document.getElementById("btn-snap-page").addEventListener("click", () => this.snapPage());
-    document.getElementById("btn-upload-drive").addEventListener("click", () => this.compileAndGenerateDriveLink());
-
     // Soft Delete Form Submit
     document.getElementById("soft-delete-form")?.addEventListener("submit", (e) => this.handleSoftDeleteSubmit(e));
 
