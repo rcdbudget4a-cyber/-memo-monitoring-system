@@ -49,12 +49,15 @@
       </div>
 
       <div class="header-actions">
-        <button class="btn btn-outline btn-sm" id="btn-change-passcode" style="background: rgba(255,255,255,0.15); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); font-weight:700;" title="Change Security Passcode">
-          <span>🔑 Change Passcode</span>
-        </button>
-        <button class="btn btn-outline btn-sm" id="btn-lock-system" style="background: rgba(255,255,255,0.15); color: #ffffff; border: 1px solid rgba(255,255,255,0.3); font-weight:700;" title="Lock System Screen">
-          <span>🔒 Lock System</span>
-        </button>
+        <div id="auth-user-badge" style="display:none; align-items:center; gap:10px; background:rgba(255,255,255,0.12); padding:4px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.25);">
+          <div style="display:flex; flex-direction:column; text-align:right;">
+            <span id="auth-user-name" style="font-size:0.82rem; font-weight:800; color:#ffffff;">Officer Name</span>
+            <span id="auth-user-role" style="font-size:0.68rem; font-weight:800; color:#f59e0b; text-transform:uppercase;">RECORDS_ADMIN</span>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="window.authManager.logout()" style="padding:4px 8px; font-size:0.75rem; color:#fca5a5; border-color:#fca5a5;" title="Sign Out of System">
+            <span>🚪 Logout</span>
+          </button>
+        </div>
         <div class="time-badge" id="live-clock">
           Loading clock...
         </div>
@@ -595,14 +598,14 @@
     </div>
   </div>
 
-  <!-- SECURITY OVERLAY MODAL: RCD Passcode Lock Screen -->
-  <div class="modal-overlay" id="lock-modal" style="z-index: 9999; background: rgba(7, 16, 33, 0.95); backdrop-filter: blur(10px);">
-    <div class="modal-card" style="max-width: 450px; border-radius: 16px; border: 2px solid #38bdf8; box-shadow: 0 20px 50px rgba(0,0,0,0.8); background: linear-gradient(180deg, #0b1d3a 0%, #07152b 100%); color: white;">
+  <!-- SECURITY OVERLAY MODAL: Firebase Authentication Login Screen -->
+  <div class="modal-overlay" id="auth-login-modal" style="z-index: 9999; background: rgba(7, 16, 33, 0.95); backdrop-filter: blur(10px);">
+    <div class="modal-card" style="max-width: 440px; border-radius: 16px; border: 2px solid #38bdf8; box-shadow: 0 20px 50px rgba(0,0,0,0.8); background: linear-gradient(180deg, #0b1d3a 0%, #07152b 100%); color: white;">
       <div style="padding: 28px 24px 16px 24px; text-align: center;">
         <div style="display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 16px;">
-          <img src="assets/pnp_badge.png" style="height: 52px; width: auto;" alt="PNP Badge" />
-          <img src="assets/pro4a_logo.png" style="height: 52px; width: auto;" alt="PRO4A Emblem" />
-          <img src="assets/rcd_logo.png" style="height: 52px; width: 52px; border-radius: 50%; border: 2px solid #e9c46a;" alt="RCD Logo" />
+          <img src="assets/pnp_badge.png" style="height: 50px; width: auto;" alt="PNP Badge" />
+          <img src="assets/pro4a_logo.png" style="height: 50px; width: auto;" alt="PRO4A Emblem" />
+          <img src="assets/rcd_logo.png" style="height: 50px; width: 50px; border-radius: 50%; border: 2px solid #e9c46a;" alt="RCD Logo" />
         </div>
 
         <div style="font-size: 0.72rem; font-weight: 800; color: #94a3b8; letter-spacing: 1.5px; text-transform: uppercase;">
@@ -612,72 +615,33 @@
           REGIONAL COMPTROLLERSHIP DIVISION
         </div>
         <div style="font-size: 0.85rem; font-weight: 700; color: #38bdf8; margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-          <span>🔒 RESTRICTED SYSTEM ACCESS</span>
+          <span>🔐 AUTHORIZED PERSONNEL LOGIN</span>
         </div>
       </div>
 
-      <form id="lock-screen-form" style="padding: 0 24px 28px 24px;">
-        <div style="margin-bottom: 16px;">
-          <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
-            Enter RCD Security Passcode
+      <form id="auth-login-form" onsubmit="event.preventDefault(); const email=document.getElementById('auth-email-input').value; const pass=document.getElementById('auth-pass-input').value; window.authManager.login(email, pass).catch(err => { const el=document.getElementById('auth-error-msg'); el.style.display='block'; el.textContent='❌ Login Failed: '+err.message; });" style="padding: 0 24px 28px 24px;">
+        <div style="margin-bottom: 14px;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
+            Officer Email Address
           </label>
-          <input type="password" id="lock-passcode-input" required placeholder="••••••••" style="width: 100%; padding: 12px 16px; font-size: 1.1rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff; text-align: center; letter-spacing: 2px;" autocomplete="off" />
+          <input type="email" id="auth-email-input" required placeholder="duty.pnco@pro4a.pnp.gov.ph" value="duty.pnco@pro4a.pnp.gov.ph" style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff;" autocomplete="email" />
         </div>
 
-        <div id="lock-error-msg" style="display: none; padding: 8px 12px; background: rgba(220, 38, 38, 0.25); border: 1px solid #fca5a5; color: #fca5a5; border-radius: 6px; font-size: 0.82rem; font-weight: 700; text-align: center; margin-bottom: 14px;">
-          ❌ Invalid Security Passcode. Try again.
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
+            Password
+          </label>
+          <input type="password" id="auth-pass-input" required placeholder="••••••••" value="PRO4A@2026" style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff;" autocomplete="current-password" />
         </div>
+
+        <div id="auth-error-msg" style="display: none; padding: 8px 12px; background: rgba(220, 38, 38, 0.25); border: 1px solid #fca5a5; color: #fca5a5; border-radius: 6px; font-size: 0.82rem; font-weight: 700; text-align: center; margin-bottom: 14px;"></div>
 
         <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; font-size: 0.95rem; font-weight: 800; border-radius: 8px; justify-content: center; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); cursor: pointer;">
-          <span>🔓 Unlock System Access</span>
+          <span>🔑 Secure Officer Sign In</span>
         </button>
 
         <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 16px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
-          🔑 Authorized RCD Personnel Only
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL: Change Security Passcode Modal -->
-  <div class="modal-overlay" id="change-passcode-modal">
-    <div class="modal-card" style="max-width: 450px;">
-      <div class="modal-header">
-        <div class="modal-title">
-          <span>🔑 Change Security Passcode</span>
-        </div>
-        <button class="modal-close">&times;</button>
-      </div>
-
-      <form id="change-passcode-form">
-        <div class="modal-body">
-          <p style="font-size: 0.85rem; color: #475569; margin-bottom: 16px;">
-            Update your system security passcode. Your new passcode will be saved securely for future system unlocking.
-          </p>
-
-          <div class="form-group" style="margin-bottom: 14px;">
-            <label>Current Passcode</label>
-            <input type="password" id="pass-current" required placeholder="Enter current passcode..." autocomplete="current-password" />
-          </div>
-
-          <div class="form-group" style="margin-bottom: 14px;">
-            <label>New Passcode</label>
-            <input type="password" id="pass-new" required placeholder="Enter new passcode..." minlength="4" autocomplete="new-password" />
-          </div>
-
-          <div class="form-group" style="margin-bottom: 14px;">
-            <label>Confirm New Passcode</label>
-            <input type="password" id="pass-confirm" required placeholder="Re-enter new passcode..." minlength="4" autocomplete="new-password" />
-          </div>
-
-          <div id="change-pass-status" style="display: none; padding: 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 700; margin-top: 10px;"></div>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline btn-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary">
-            <span>💾 Save New Passcode</span>
-          </button>
+          Authorized RCD Personnel Only • Protected by Firebase Security
         </div>
       </form>
     </div>
@@ -706,9 +670,19 @@
     </div>
   </div>
 
-  <!-- Firebase Cloud Database SDK -->
+  <!-- Firebase Cloud Database & Auth SDK (v10.8.0) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <!-- Modular Infrastructure Scripts -->
+  <script src="js/config.js?v=2.0"></script>
+  <script src="js/auth.js?v=2.0"></script>
+  <script src="js/storage.js?v=2.0"></script>
+  <script src="js/validation.js?v=2.0"></script>
+  <script src="js/audit.js?v=2.0"></script>
+  <script src="js/ui.js?v=2.0"></script>
+
   <!-- Full Google Sheets Dataset (1,207 Records) -->
   <script src="js/memos_data.js?v=12.0"></script>
   <!-- Application Logic -->

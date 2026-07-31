@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActiveUser() {
+      return isAuthenticated() && getUserData().active == true;
+    }
+
+    function hasRole(role) {
+      return isActiveUser() && getUserData().role == role;
+    }
+
+    function isAnyRole(roles) {
+      return isActiveUser() && (getUserData().role in roles);
+    }
+
+    // User profiles collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      // Only admins can create, update roles, or deactivate user profiles
+      allow create, update, delete: if hasRole('admin');
+    }
+
+    // Memos collection
+    match /memos/{memoId} {
+      // Any authenticated active user can read memos
+      allow read: if isActiveUser();
+
+      // Creation allowed for admin, records_admin, duty_pnco, and action_officer
+      allow create: if isAnyRole(['admin', 'records_admin', 'duty_pnco', 'action_officer']);
+
+      // Updates allowed for admin, records_admin, duty_pnco, action_officer, and approver
+      allow update: if isAnyRole(['admin', 'records_admin', 'duty_pnco', 'action_officer', 'approver']);
+
+      // Hard deletion denied for standard users; only admin can delete
+      allow delete: if hasRole('admin');
+    }
+
+    // Audit logs collection (Append-Only Trail)
+    match /audit_logs/{logId} {
+      allow read: if isActiveUser();
+      // Any authenticated active user can append an audit entry
+      allow create: if isActiveUser();
+      // Audit log entries can NEVER be edited or deleted by anyone
+      allow update, delete: if false;
+    }
+
+    // Security Settings
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('admin');
+    }
+  }
+}

@@ -16896,5 +16896,47 @@ window.INITIAL_MEMOS = [
         "dateReceived":  "",
         "driveLink":  "https://drive.google.com/open?id=1Yqj3pEU-0_2Moo8aAObezusWOLGe_NQ_",
         "pages":  1
+    },
+    {
+        "id":  "MEMO-2026-1208",
+        "dateLogged":  "7/30/2026",
+        "time":  "2:15:00 PM",
+        "receivedBy":  "Pat Bornidor",
+        "originatingOffice":  "RICTMD",
+        "subject":  "After Activity Report on the Repair and Maintenance of the PRO 4A LED Wall",
+        "actionRequired":  "For Info",
+        "remarksStatus":  "Transmitted to",
+        "transmittedOffice":  "ROD",
+        "dateReceived":  "7/30/2026",
+        "driveLink":  "https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing",
+        "pages":  1
+    },
+    {
+        "id":  "MEMO-2026-1209",
+        "dateLogged":  "7/31/2026",
+        "time":  "9:10:00 AM",
+        "receivedBy":  "Pat Bornidor",
+        "originatingOffice":  "RLRDD",
+        "subject":  "Findings and Reminders during the Inspection of 7S of Good Housekeeping",
+        "actionRequired":  "For Info",
+        "remarksStatus":  "Transmitted to",
+        "transmittedOffice":  "RPSMD",
+        "dateReceived":  "7/31/2026",
+        "driveLink":  "https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing",
+        "pages":  1
+    },
+    {
+        "id":  "MEMO-2026-1210",
+        "dateLogged":  "7/31/2026",
+        "time":  "10:45:00 AM",
+        "receivedBy":  "Pat Bornidor",
+        "originatingOffice":  "RICTMD",
+        "subject":  "Designation of Cybercheck Agent as an FNT Issuer",
+        "actionRequired":  "For Concur",
+        "remarksStatus":  "For Concur with R6",
+        "transmittedOffice":  "",
+        "dateReceived":  "",
+        "driveLink":  "https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing",
+        "pages":  1
     }
 ];

@@ -36,22 +36,13 @@ class MemoMonitoringApp {
   initFirebase() {
     if (typeof firebase === "undefined") return;
 
-    // Firebase Console Project: incoming-outgoing-memo
-    const firebaseConfig = {
-      apiKey: "AIzaSyC04xaukwxDG9-Hn8B1vwZVuaQrvb9zH1k",
-      authDomain: "incoming-outgoing-memo.firebaseapp.com",
-      projectId: "incoming-outgoing-memo",
-      storageBucket: "incoming-outgoing-memo.firebasestorage.app",
-      messagingSenderId: "985454161101",
-      appId: "1:985454161101:web:95da4973e0cc72b574cd84",
-      measurementId: "G-34W97S6RBW"
-    };
-
     try {
       if (!firebase.apps.length) {
-        firebase.initializeApp(firebaseConfig);
+        firebase.initializeApp(APP_CONFIG.FIREBASE);
       }
       this.db = firebase.firestore();
+      if (window.authManager) window.authManager.init(firebase.app());
+      if (window.auditManager) window.auditManager.init(this.db);
       this.listenFirebaseSync();
     } catch (e) {
       console.warn("Firebase Cloud Database notice:", e);
@@ -60,13 +51,9 @@ class MemoMonitoringApp {
 
   async syncAllDataToFirebase() {
     if (!this.db) {
-      alert("⚠️ Firebase Database is not connected.\nPlease check your internet connection.");
+      if (window.uiManager) window.uiManager.showToast("⚠️ Firebase Database is not connected.", "error");
       return;
     }
-
-    const btn = document.getElementById("btn-sync-firebase");
-    const originalHtml = btn ? btn.innerHTML : "";
-    if (btn) btn.innerHTML = "<span>⏳ Syncing Records to Firebase...</span>";
 
     try {
       const memosToSync = this.memos && this.memos.length > 0 ? this.memos : this.getInitialMemos();
@@ -79,7 +66,7 @@ class MemoMonitoringApp {
 
         chunk.forEach(memo => {
           if (memo && memo.id) {
-            const cleanMemo = { ...memo };
+            const cleanMemo = window.storageManager ? window.storageManager.normalizeMemo(memo) : { ...memo };
             if (cleanMemo.fileData && cleanMemo.fileData.length > 500000) {
               delete cleanMemo.fileData;
             }
@@ -95,12 +82,9 @@ class MemoMonitoringApp {
         await batch.commit();
       }
 
-      alert(`✅ SUCCESS!\nSynced ${count} Memorandum records directly to your Firebase Firestore Database ("incoming-outgoing-memo").`);
+      if (window.uiManager) window.uiManager.showToast(`✅ Synced ${count} records to Firebase!`, "success");
     } catch (err) {
       console.error("Firebase sync error:", err);
-      alert(`⚠️ Firebase Sync Notice:\n${err.message}\n\nMake sure Firestore Database is created in your Firebase Console (incoming-outgoing-memo) and Security Rules are set to test mode.`);
-    } finally {
-      if (btn) btn.innerHTML = originalHtml;
     }
   }
 
@@ -115,10 +99,11 @@ class MemoMonitoringApp {
             const remoteMemo = doc.data();
             if (remoteMemo && remoteMemo.id) {
               const idx = this.memos.findIndex(m => m.id === remoteMemo.id);
+              const normalized = window.storageManager ? window.storageManager.normalizeMemo(remoteMemo) : remoteMemo;
               if (idx >= 0) {
-                this.memos[idx] = { ...this.memos[idx], ...remoteMemo };
+                this.memos[idx] = { ...this.memos[idx], ...normalized };
               } else {
-                this.memos.unshift(remoteMemo);
+                this.memos.unshift(normalized);
                 updated = true;
               }
             }
@@ -132,197 +117,41 @@ class MemoMonitoringApp {
       }, (err) => {
         console.warn("Firebase listener notice:", err);
       });
-
-      // Sync Universal Security Passcode across all devices
-      this.db.collection("settings").doc("security").onSnapshot((doc) => {
-        if (doc.exists && doc.data()?.passcode) {
-          const remotePass = doc.data().passcode;
-          localStorage.setItem("RCD_CUSTOM_PASSCODE", remotePass);
-        }
-      }, (err) => {
-        console.warn("Firebase security listener notice:", err);
-      });
     } catch (e) {
       console.warn("Firebase sync notice:", e);
     }
   }
 
   checkSecurityAuth() {
-    const isAuth = sessionStorage.getItem("RCD_MEMO_AUTHENTICATED") === "true";
-    if (!isAuth) {
-      if (this.lockModal) {
-        this.lockModal.classList.add("active");
-        setTimeout(() => this.lockInput?.focus(), 300);
-      }
-    } else {
-      if (this.lockModal) {
-        this.lockModal.classList.remove("active");
-      }
-    }
-  }
-
-  lockSystem() {
-    sessionStorage.removeItem("RCD_MEMO_AUTHENTICATED");
-    if (this.lockError) this.lockError.style.display = "none";
-    if (this.lockInput) this.lockInput.value = "";
-    if (this.lockModal) {
-      this.lockModal.classList.add("active");
-      setTimeout(() => this.lockInput?.focus(), 300);
-    }
-  }
-
-  handleUnlockSubmit(e) {
-    e.preventDefault();
-    const inputPass = this.lockInput?.value ? this.lockInput.value.trim() : "";
-    const customPass = localStorage.getItem("RCD_CUSTOM_PASSCODE");
-
-    // If custom passcode exists, ONLY customPass is valid. Otherwise fallback to default PRO4A2026
-    const activePasscodes = customPass 
-      ? [customPass] 
-      : ["PRO4A2026", "RCD2026", "RCD4A", "PRO4A"];
-
-    if (activePasscodes.some(p => p === inputPass || p.toLowerCase() === inputPass.toLowerCase())) {
-      sessionStorage.setItem("RCD_MEMO_AUTHENTICATED", "true");
-      if (this.lockError) this.lockError.style.display = "none";
-      if (this.lockModal) this.lockModal.classList.remove("active");
-      if (this.lockInput) this.lockInput.value = "";
-    } else {
-      if (this.lockError) this.lockError.style.display = "block";
-      if (this.lockInput) {
-        this.lockInput.focus();
-        this.lockInput.select();
-      }
-    }
-  }
-
-  openChangePasscodeModal() {
-    this.closeAllModals();
-    if (this.changePassForm) this.changePassForm.reset();
-    if (this.changePassStatus) this.changePassStatus.style.display = "none";
-    if (this.changePassModal) this.changePassModal.classList.add("active");
-  }
-
-  handleChangePasscodeSubmit(e) {
-    e.preventDefault();
-    const currVal = this.passCurrentInput?.value ? this.passCurrentInput.value.trim() : "";
-    const newVal = this.passNewInput?.value ? this.passNewInput.value.trim() : "";
-    const confirmVal = this.passConfirmInput?.value ? this.passConfirmInput.value.trim() : "";
-
-    const activeCustom = localStorage.getItem("RCD_CUSTOM_PASSCODE");
-    const activePasscodes = activeCustom 
-      ? [activeCustom] 
-      : ["PRO4A2026", "RCD2026", "RCD4A", "PRO4A"];
-
-    const isCurrentValid = activePasscodes.some(p => p === currVal || p.toLowerCase() === currVal.toLowerCase());
-
-    if (!isCurrentValid) {
-      if (this.changePassStatus) {
-        this.changePassStatus.style.display = "block";
-        this.changePassStatus.style.background = "#fee2e2";
-        this.changePassStatus.style.color = "#991b1b";
-        this.changePassStatus.textContent = "❌ Current passcode is incorrect.";
-      }
-      return;
-    }
-
-    if (newVal.length < 4) {
-      if (this.changePassStatus) {
-        this.changePassStatus.style.display = "block";
-        this.changePassStatus.style.background = "#fee2e2";
-        this.changePassStatus.style.color = "#991b1b";
-        this.changePassStatus.textContent = "❌ New passcode must be at least 4 characters long.";
-      }
-      return;
-    }
-
-    if (newVal !== confirmVal) {
-      if (this.changePassStatus) {
-        this.changePassStatus.style.display = "block";
-        this.changePassStatus.style.background = "#fee2e2";
-        this.changePassStatus.style.color = "#991b1b";
-        this.changePassStatus.textContent = "❌ New passcode and confirm passcode do not match.";
-      }
-      return;
-    }
-
-    localStorage.setItem("RCD_CUSTOM_PASSCODE", newVal);
-
-    if (this.db) {
-      try {
-        this.db.collection("settings").doc("security").set({ passcode: newVal }, { merge: true }).catch(() => {});
-      } catch (e) {
-        console.warn("Firebase passcode save notice:", e);
-      }
-    }
-
-    if (this.changePassStatus) {
-      this.changePassStatus.style.display = "block";
-      this.changePassStatus.style.background = "#dcfce7";
-      this.changePassStatus.style.color = "#166534";
-      this.changePassStatus.textContent = "✅ Passcode successfully changed!";
-    }
-
-    setTimeout(() => {
-      if (this.changePassModal) this.changePassModal.classList.remove("active");
-    }, 1200);
+    // Auth status is now securely handled by window.authManager
   }
 
   getInitialMemos() {
     if (typeof window.INITIAL_MEMOS !== "undefined" && Array.isArray(window.INITIAL_MEMOS) && window.INITIAL_MEMOS.length > 0) {
-      return window.INITIAL_MEMOS;
+      return window.INITIAL_MEMOS.map(m => window.storageManager ? window.storageManager.normalizeMemo(m) : m);
     }
     return [];
   }
 
-  populateOfficeFilter() {
-    if (!this.officeFilter) return;
-    const currentVal = this.officeFilter.value || "ALL";
-    const offices = Array.from(new Set(this.memos.map(m => m.originatingOffice).filter(Boolean))).sort();
-    
-    let html = '<option value="ALL">All Originating Offices</option>';
-    offices.forEach(off => {
-      html += `<option value="${off}">${off}</option>`;
-    });
-    this.officeFilter.innerHTML = html;
-    this.officeFilter.value = offices.includes(currentVal) ? currentVal : "ALL";
-  }
-
   loadMemos() {
-    const defaultMemos = this.getInitialMemos();
-    try {
-      const saved = localStorage.getItem("RCD_MEMO_MONITORING_DATA");
-      if (saved) {
-        const memos = JSON.parse(saved);
-        if (Array.isArray(memos) && memos.length > 0) {
-          return memos;
-        }
-      }
-    } catch (e) {
-      console.warn("LocalStorage access restricted in file:// origin or tracking prevention mode", e);
+    if (window.storageManager) {
+      const raw = window.storageManager.loadLocalMemos();
+      return raw.map(m => window.storageManager.normalizeMemo(m));
     }
-    return defaultMemos;
+    return this.getInitialMemos();
   }
 
   saveMemos() {
-    try {
-      // Strip very large base64 fileData when writing to localStorage to prevent QuotaExceededError
-      const cleanMemos = this.memos.map(m => {
-        const copy = { ...m };
-        if (copy.fileData && copy.fileData.length > 500000) {
-          delete copy.fileData;
-        }
-        return copy;
-      });
-      localStorage.setItem("RCD_MEMO_MONITORING_DATA", JSON.stringify(cleanMemos));
-    } catch (e) {
-      console.warn("LocalStorage save warning", e);
+    if (window.storageManager) {
+      window.storageManager.saveLocalMemos(this.memos);
     }
 
     if (this.db) {
       try {
-        const latestMemos = this.memos.slice(0, 100);
+        const latestMemos = this.memos.slice(0, 50);
         latestMemos.forEach(memo => {
-          this.db.collection("memos").doc(memo.id).set(memo, { merge: true }).catch(() => {});
+          const norm = window.storageManager ? window.storageManager.normalizeMemo(memo) : memo;
+          this.db.collection("memos").doc(norm.id).set(norm, { merge: true }).catch(() => {});
         });
       } catch (e) {
         console.warn("Firebase Cloud Sync warning", e);
