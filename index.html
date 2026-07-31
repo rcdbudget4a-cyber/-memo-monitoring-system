@@ -65,6 +65,26 @@
     </div>
   </header>
 
+  <!-- System Navigation Bar -->
+  <nav class="system-nav-bar" style="background:#0f2347; border-bottom:1px solid #1e3a8a; padding:6px 24px;">
+    <div style="max-width:1800px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="nav-tab active" id="tab-all" onclick="if(window.app){ window.app.filterType('ALL'); }" style="padding:6px 14px; border-radius:6px; border:none; background:#1e3a8a; color:#ffffff; font-weight:700; font-size:0.85rem; cursor:pointer;">
+          <span>📑 All Memos</span>
+        </button>
+        <button class="nav-tab" id="tab-incoming" onclick="if(window.app){ window.app.filterType('INCOMING'); }" style="padding:6px 14px; border-radius:6px; border:none; background:transparent; color:#cbd5e1; font-weight:700; font-size:0.85rem; cursor:pointer;">
+          <span>📥 Incoming Memos</span>
+        </button>
+        <button class="nav-tab" id="tab-outgoing" onclick="if(window.app){ window.app.filterType('OUTGOING'); }" style="padding:6px 14px; border-radius:6px; border:none; background:transparent; color:#cbd5e1; font-weight:700; font-size:0.85rem; cursor:pointer;">
+          <span>📤 Outgoing RCD Memos</span>
+        </button>
+        <button class="nav-tab" id="tab-recycle" onclick="if(window.app){ window.app.openRecycleBinModal(); }" style="padding:6px 14px; border-radius:6px; border:none; background:transparent; color:#cbd5e1; font-weight:700; font-size:0.85rem; cursor:pointer;">
+          <span>♻️ Recycle Bin</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
   <!-- Main Container -->
   <main class="main-wrapper">
 
@@ -670,6 +690,76 @@
     </div>
   </div>
 
+  <!-- MODAL: Soft Delete Confirmation Modal -->
+  <div class="modal-overlay" id="soft-delete-modal">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%);">
+        <div class="modal-title">
+          <span>🗑️ Confirm Soft Delete</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <form id="soft-delete-form">
+        <div class="modal-body">
+          <p style="font-size: 0.88rem; color: #475569; margin-bottom: 14px;">
+            Are you sure you want to remove this memorandum record? The record will be moved to the <strong>Recycle Bin</strong> and can be restored by an administrator.
+          </p>
+
+          <input type="hidden" id="delete-memo-id" />
+
+          <div class="form-group">
+            <label style="color:#991b1b; font-weight:700;">Reason for Deletion (Required)</label>
+            <textarea id="delete-reason-input" rows="3" required placeholder="e.g. Duplicate entry, Cancelled transaction, Data correction..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-cancel">Cancel</button>
+          <button type="submit" class="btn btn-danger">
+            <span>🗑️ Move to Recycle Bin</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Recycle Bin Modal -->
+  <div class="modal-overlay" id="recycle-bin-modal">
+    <div class="modal-card" style="max-width: 850px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #334155 0%, #1e293b 100%);">
+        <div class="modal-title">
+          <span>♻️ Admin Recycle Bin (Deleted Records)</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding: 15px;">
+        <div class="table-responsive">
+          <table class="memo-table">
+            <thead>
+              <tr>
+                <th>Control No.</th>
+                <th>Subject</th>
+                <th>Deleted Date</th>
+                <th>Deleted By</th>
+                <th>Reason</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="recycle-bin-table-body">
+              <!-- Rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-cancel">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Firebase Cloud Database & Auth SDK (v10.8.0) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -681,9 +771,10 @@
   <script src="js/storage.js?v=2.0"></script>
   <script src="js/validation.js?v=2.0"></script>
   <script src="js/audit.js?v=2.0"></script>
+  <script src="js/aging.js?v=2.0"></script>
   <script src="js/ui.js?v=2.0"></script>
 
-  <!-- Full Google Sheets Dataset (1,207 Records) -->
+  <!-- Full Google Sheets Dataset (1,210 Records) -->
   <script src="js/memos_data.js?v=12.0"></script>
   <!-- Application Logic -->
   <script src="js/app.js?v=12.0"></script>

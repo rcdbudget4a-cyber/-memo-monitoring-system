@@ -410,6 +410,9 @@ class MemoMonitoringApp {
     document.getElementById("btn-snap-page").addEventListener("click", () => this.snapPage());
     document.getElementById("btn-upload-drive").addEventListener("click", () => this.compileAndGenerateDriveLink());
 
+    // Soft Delete Form Submit
+    document.getElementById("soft-delete-form")?.addEventListener("submit", (e) => this.handleSoftDeleteSubmit(e));
+
     // Modal Closes
     document.querySelectorAll(".modal-close, .btn-cancel").forEach((btn) => {
       btn.addEventListener("click", () => this.closeAllModals());
@@ -441,8 +444,37 @@ class MemoMonitoringApp {
     this.statDrive.textContent = driveDocs;
   }
 
+  filterType(type) {
+    this.currentMemoType = type || "ALL";
+
+    document.querySelectorAll(".nav-tab").forEach(tab => {
+      tab.style.background = "transparent";
+      tab.style.color = "#cbd5e1";
+    });
+
+    const activeTabId = type === "INCOMING" ? "tab-incoming" : type === "OUTGOING" ? "tab-outgoing" : "tab-all";
+    const activeTab = document.getElementById(activeTabId);
+    if (activeTab) {
+      activeTab.style.background = "#1e3a8a";
+      activeTab.style.color = "#ffffff";
+    }
+
+    this.renderTable();
+  }
+
   renderTable() {
     let filtered = this.memos.filter((memo) => {
+      // Exclude Soft-Deleted Memos from main logbook
+      if (memo.isDeleted === true) return false;
+
+      // Memo Type Navigation Filter (ALL vs INCOMING vs OUTGOING)
+      if (this.currentMemoType === "INCOMING" && memo.memoType !== "INCOMING") {
+        return false;
+      }
+      if (this.currentMemoType === "OUTGOING" && memo.memoType !== "OUTGOING") {
+        return false;
+      }
+
       // Office Filter
       if (this.currentFilterOffice !== "ALL" && memo.originatingOffice !== this.currentFilterOffice) {
         return false;
@@ -464,7 +496,7 @@ class MemoMonitoringApp {
       return true;
     });
 
-    // Sort Order requested by User: Latest / Newest Memos First by default
+    // Sort Order
     filtered.sort((a, b) => {
       const dateA = new Date(a.dateLogged).getTime() || 0;
       const dateB = new Date(b.dateLogged).getTime() || 0;
@@ -475,14 +507,14 @@ class MemoMonitoringApp {
         if (dateA !== dateB) return dateA - dateB;
         return numA - numB;
       } else {
-        // Default: NEWEST (Latest Memos First)
         if (dateB !== dateA) return dateB - dateA;
         return numB - numA;
       }
     });
 
+    const activeTotal = this.memos.filter(m => !m.isDeleted).length;
     this.currentFilteredMemos = filtered;
-    this.tableCountEl.textContent = `Showing ${filtered.length} of ${this.memos.length} Memorandum Records`;
+    this.tableCountEl.textContent = `Showing ${filtered.length} of ${activeTotal} Memorandum Records`;
     this.tableBody.innerHTML = "";
 
     if (filtered.length === 0) {
@@ -493,19 +525,16 @@ class MemoMonitoringApp {
     filtered.forEach((memo) => {
       const tr = document.createElement("tr");
 
-      // Row Status Color Rules requested by User:
-      // - GREEN: Transmitted out of RCD (memo has exited RCD / transmitted to target office)
-      // - LIGHT RED / PINK: Incoming / Pending inside RCD (has not yet exited RCD)
       const isTransmittedOut = memo.remarksStatus === "Transmitted to" || (memo.transmittedOffice && memo.transmittedOffice.trim().length > 2);
       const isConcurredOrApproved = memo.remarksStatus.includes("Concur") || memo.remarksStatus.includes("Approved") || memo.remarksStatus.includes("Signed");
 
       if (isTransmittedOut) {
-        tr.className = "row-transmitted"; // Light Green row
+        tr.className = "row-transmitted";
       } else {
-        tr.className = "row-pending-rcd"; // Light Red / Coral Pink row (Inside RCD)
+        tr.className = "row-pending-rcd";
       }
 
-      // Status Badge Style
+      // Status Badge & Working-day aging status
       let statusBadgeHtml = "";
       if (isTransmittedOut) {
         statusBadgeHtml = `<span class="badge-status status-transmitted">🟢 Transmitted</span>`;
@@ -514,6 +543,9 @@ class MemoMonitoringApp {
       } else {
         statusBadgeHtml = `<span class="badge-status status-pending">🔴 Inside RCD</span>`;
       }
+
+      const agingInfo = window.agingManager ? window.agingManager.getAgingStatus(memo) : { text: "" };
+      const agingHtml = agingInfo.text ? `<span style="display:inline-block; margin-top:3px; padding:2px 6px; border-radius:4px; font-size:0.68rem; font-weight:800; background:#f1f5f9; color:#334155;">⏱️ ${agingInfo.text}</span>` : '';
 
       tr.innerHTML = `
         <td style="text-align:center;"><input type="checkbox" class="memo-checkbox" data-id="${memo.id}" ${this.selectedMemoIds.has(memo.id) ? 'checked' : ''} /></td>
@@ -524,6 +556,7 @@ class MemoMonitoringApp {
         <td class="subject-cell">
           <span class="subject-title">${memo.subject}</span>
           <span class="subject-meta">Ref ID: ${memo.id} | ${memo.pages || 1} Page(s)</span>
+          ${agingHtml}
         </td>
         <td><span style="font-weight:700;">${memo.actionRequired}</span></td>
         <td>
@@ -1693,6 +1726,99 @@ class MemoMonitoringApp {
   closeAllModals() {
     document.querySelectorAll(".modal-overlay").forEach(m => m.classList.remove("active"));
     this.stopWebcam();
+  }
+
+  deleteMemo(id) {
+    const memo = this.memos.find(m => m.id === id);
+    if (!memo) return;
+
+    this.closeAllModals();
+    const modal = document.getElementById("soft-delete-modal");
+    document.getElementById("delete-memo-id").value = id;
+    document.getElementById("delete-reason-input").value = "";
+    if (modal) modal.classList.add("active");
+  }
+
+  handleSoftDeleteSubmit(e) {
+    if (e) e.preventDefault();
+    const id = document.getElementById("delete-memo-id").value;
+    const reason = document.getElementById("delete-reason-input").value.trim();
+
+    if (!reason) {
+      if (window.uiManager) window.uiManager.showToast("Please enter a reason for deletion.", "error");
+      return;
+    }
+
+    const memo = this.memos.find(m => m.id === id);
+    if (memo) {
+      memo.isDeleted = true;
+      memo.deletedAt = new Date().toISOString();
+      memo.deletedByUid = window.authManager?.currentUser?.uid || "duty_officer";
+      memo.deleteReason = reason;
+
+      this.saveMemos();
+      this.closeAllModals();
+
+      if (window.auditManager) {
+        window.auditManager.logAction(id, "SOFT_DELETE", { reason }, `Moved record ${id} to Recycle Bin`);
+      }
+      if (window.uiManager) {
+        window.uiManager.showToast(`🗑️ Record ${id} moved to Recycle Bin`, "info");
+      }
+    }
+  }
+
+  openRecycleBinModal() {
+    this.closeAllModals();
+    const modal = document.getElementById("recycle-bin-modal");
+    const tbody = document.getElementById("recycle-bin-table-body");
+    const deletedMemos = this.memos.filter(m => m.isDeleted === true);
+
+    if (tbody) {
+      tbody.innerHTML = "";
+      if (deletedMemos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#64748b;">No deleted records in Recycle Bin.</td></tr>`;
+      } else {
+        deletedMemos.forEach(m => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td><strong>${m.id}</strong></td>
+            <td style="max-width:250px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${m.subject}</td>
+            <td style="font-size:0.78rem;">${m.deletedAt ? new Date(m.deletedAt).toLocaleDateString() : 'N/A'}</td>
+            <td>${m.deletedByUid || 'System User'}</td>
+            <td style="font-style:italic; font-size:0.8rem; max-width:180px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${m.deleteReason || 'No reason'}</td>
+            <td>
+              <button class="btn btn-primary btn-sm" onclick="app.restoreMemo('${m.id}')" style="padding:2px 8px; font-size:0.75rem;">
+                🔄 Restore
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+    }
+
+    if (modal) modal.classList.add("active");
+  }
+
+  restoreMemo(id) {
+    const memo = this.memos.find(m => m.id === id);
+    if (memo) {
+      memo.isDeleted = false;
+      memo.deletedAt = "";
+      memo.deletedByUid = "";
+      memo.deleteReason = "";
+
+      this.saveMemos();
+      this.openRecycleBinModal();
+
+      if (window.auditManager) {
+        window.auditManager.logAction(id, "RESTORE", {}, `Restored record ${id} from Recycle Bin`);
+      }
+      if (window.uiManager) {
+        window.uiManager.showToast(`✅ Restored record ${id} back to active logbook!`, "success");
+      }
+    }
   }
 }
 
