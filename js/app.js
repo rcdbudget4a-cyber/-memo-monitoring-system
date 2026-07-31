@@ -23,11 +23,131 @@ class MemoMonitoringApp {
     this.webcamStream = null;
 
     this.initElements();
+    this.checkSecurityAuth();
     this.populateOfficeFilter();
     this.bindEvents();
     this.startClock();
     this.renderStats();
     this.renderTable();
+  }
+
+  checkSecurityAuth() {
+    const isAuth = sessionStorage.getItem("RCD_MEMO_AUTHENTICATED") === "true";
+    if (!isAuth) {
+      if (this.lockModal) {
+        this.lockModal.classList.add("active");
+        setTimeout(() => this.lockInput?.focus(), 300);
+      }
+    } else {
+      if (this.lockModal) {
+        this.lockModal.classList.remove("active");
+      }
+    }
+  }
+
+  lockSystem() {
+    sessionStorage.removeItem("RCD_MEMO_AUTHENTICATED");
+    if (this.lockError) this.lockError.style.display = "none";
+    if (this.lockInput) this.lockInput.value = "";
+    if (this.lockModal) {
+      this.lockModal.classList.add("active");
+      setTimeout(() => this.lockInput?.focus(), 300);
+    }
+  }
+
+  handleUnlockSubmit(e) {
+    e.preventDefault();
+    const inputPass = this.lockInput?.value ? this.lockInput.value.trim() : "";
+    const customPass = localStorage.getItem("RCD_CUSTOM_PASSCODE");
+
+    const validPasscodes = [
+      "PRO4A2026",
+      "RCD2026",
+      "RCD4A",
+      "PRO4A",
+      customPass
+    ].filter(Boolean);
+
+    if (validPasscodes.some(p => p.toLowerCase() === inputPass.toLowerCase())) {
+      sessionStorage.setItem("RCD_MEMO_AUTHENTICATED", "true");
+      if (this.lockError) this.lockError.style.display = "none";
+      if (this.lockModal) this.lockModal.classList.remove("active");
+      if (this.lockInput) this.lockInput.value = "";
+    } else {
+      if (this.lockError) this.lockError.style.display = "block";
+      if (this.lockInput) {
+        this.lockInput.focus();
+        this.lockInput.select();
+      }
+    }
+  }
+
+  openChangePasscodeModal() {
+    this.closeAllModals();
+    if (this.changePassForm) this.changePassForm.reset();
+    if (this.changePassStatus) this.changePassStatus.style.display = "none";
+    if (this.changePassModal) this.changePassModal.classList.add("active");
+  }
+
+  handleChangePasscodeSubmit(e) {
+    e.preventDefault();
+    const currVal = this.passCurrentInput?.value ? this.passCurrentInput.value.trim() : "";
+    const newVal = this.passNewInput?.value ? this.passNewInput.value.trim() : "";
+    const confirmVal = this.passConfirmInput?.value ? this.passConfirmInput.value.trim() : "";
+
+    const activeCustom = localStorage.getItem("RCD_CUSTOM_PASSCODE");
+    const validCurrentPasscodes = [
+      "PRO4A2026",
+      "RCD2026",
+      "RCD4A",
+      "PRO4A",
+      activeCustom
+    ].filter(Boolean);
+
+    const isCurrentValid = validCurrentPasscodes.some(p => p.toLowerCase() === currVal.toLowerCase());
+
+    if (!isCurrentValid) {
+      if (this.changePassStatus) {
+        this.changePassStatus.style.display = "block";
+        this.changePassStatus.style.background = "#fee2e2";
+        this.changePassStatus.style.color = "#991b1b";
+        this.changePassStatus.textContent = "❌ Current passcode is incorrect.";
+      }
+      return;
+    }
+
+    if (newVal.length < 4) {
+      if (this.changePassStatus) {
+        this.changePassStatus.style.display = "block";
+        this.changePassStatus.style.background = "#fee2e2";
+        this.changePassStatus.style.color = "#991b1b";
+        this.changePassStatus.textContent = "❌ New passcode must be at least 4 characters long.";
+      }
+      return;
+    }
+
+    if (newVal !== confirmVal) {
+      if (this.changePassStatus) {
+        this.changePassStatus.style.display = "block";
+        this.changePassStatus.style.background = "#fee2e2";
+        this.changePassStatus.style.color = "#991b1b";
+        this.changePassStatus.textContent = "❌ New passcode and confirm passcode do not match.";
+      }
+      return;
+    }
+
+    localStorage.setItem("RCD_CUSTOM_PASSCODE", newVal);
+
+    if (this.changePassStatus) {
+      this.changePassStatus.style.display = "block";
+      this.changePassStatus.style.background = "#dcfce7";
+      this.changePassStatus.style.color = "#166534";
+      this.changePassStatus.textContent = "✅ Passcode successfully changed!";
+    }
+
+    setTimeout(() => {
+      if (this.changePassModal) this.changePassModal.classList.remove("active");
+    }, 1200);
   }
 
   getInitialMemos() {
@@ -107,6 +227,20 @@ class MemoMonitoringApp {
     this.journalPreviewModal = document.getElementById("journal-preview-modal");
     this.journalSetupForm = document.getElementById("journal-setup-form");
 
+    // Security Lock Screen
+    this.lockModal = document.getElementById("lock-modal");
+    this.lockForm = document.getElementById("lock-screen-form");
+    this.lockInput = document.getElementById("lock-passcode-input");
+    this.lockError = document.getElementById("lock-error-msg");
+
+    // Change Passcode Modal
+    this.changePassModal = document.getElementById("change-passcode-modal");
+    this.changePassForm = document.getElementById("change-passcode-form");
+    this.passCurrentInput = document.getElementById("pass-current");
+    this.passNewInput = document.getElementById("pass-new");
+    this.passConfirmInput = document.getElementById("pass-confirm");
+    this.changePassStatus = document.getElementById("change-pass-status");
+
     // Memo Form
     this.memoForm = document.getElementById("memo-form");
 
@@ -117,6 +251,17 @@ class MemoMonitoringApp {
   }
 
   bindEvents() {
+    // Security Lock & Change Passcode Listener
+    document.getElementById("btn-lock-system")?.addEventListener("click", () => this.lockSystem());
+    document.getElementById("btn-change-passcode")?.addEventListener("click", () => this.openChangePasscodeModal());
+
+    if (this.lockForm) {
+      this.lockForm.addEventListener("submit", (e) => this.handleUnlockSubmit(e));
+    }
+    if (this.changePassForm) {
+      this.changePassForm.addEventListener("submit", (e) => this.handleChangePasscodeSubmit(e));
+    }
+
     // Search & Filter
     this.searchInput.addEventListener("input", (e) => {
       this.currentSearchTerm = e.target.value.toLowerCase();
