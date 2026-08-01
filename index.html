@@ -54,9 +54,6 @@
             <span id="auth-user-name" style="font-size:0.82rem; font-weight:800; color:#ffffff;">Officer Name</span>
             <span id="auth-user-role" style="font-size:0.68rem; font-weight:800; color:#f59e0b; text-transform:uppercase;">RECORDS_ADMIN</span>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="if(window.app){ window.app.openChangeCredentialsModal(); }" style="padding:4px 8px; font-size:0.75rem; color:#60a5fa; border-color:#60a5fa; font-weight:700;" title="Change Officer Email & Password">
-            <span>🔐 Change Credentials</span>
-          </button>
           <button class="btn btn-outline btn-sm" onclick="window.authManager.logout()" style="padding:4px 8px; font-size:0.75rem; color:#fca5a5; border-color:#fca5a5;" title="Sign Out of System">
             <span>🚪 Logout</span>
           </button>
@@ -67,26 +64,6 @@
       </div>
     </div>
   </header>
-
-  <!-- System Navigation Bar -->
-  <nav class="system-nav-bar" style="background:#0f2347; border-bottom:1px solid #1e3a8a; padding:6px 24px;">
-    <div style="max-width:1800px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <button class="nav-tab active" id="tab-all" onclick="if(window.app){ window.app.filterType('ALL'); }" style="padding:6px 14px; border-radius:6px; border:none; background:#1e3a8a; color:#ffffff; font-weight:700; font-size:0.85rem; cursor:pointer;">
-          <span>📑 All Memos</span>
-        </button>
-        <button class="nav-tab" id="tab-incoming" onclick="if(window.app){ window.app.filterType('INCOMING'); }" style="padding:6px 14px; border-radius:6px; border:none; background:transparent; color:#cbd5e1; font-weight:700; font-size:0.85rem; cursor:pointer;">
-          <span>📥 Incoming Memos</span>
-        </button>
-        <button class="nav-tab" id="tab-outgoing" onclick="if(window.app){ window.app.filterType('OUTGOING'); }" style="padding:6px 14px; border-radius:6px; border:none; background:transparent; color:#cbd5e1; font-weight:700; font-size:0.85rem; cursor:pointer;">
-          <span>📤 Outgoing RCD Memos</span>
-        </button>
-        <button class="nav-tab" id="tab-recycle" onclick="if(window.app){ window.app.openRecycleBinModal(); }" style="padding:6px 14px; border-radius:6px; border:none; background:transparent; color:#cbd5e1; font-weight:700; font-size:0.85rem; cursor:pointer;">
-          <span>♻️ Recycle Bin</span>
-        </button>
-      </div>
-    </div>
-  </nav>
 
   <!-- Main Container -->
   <main class="main-wrapper">
@@ -621,9 +598,9 @@
     </div>
   </div>
 
-  <!-- SECURITY OVERLAY MODAL: Firebase Authentication Login Screen -->
+  <!-- SECURITY OVERLAY MODAL: Password-Only Login Screen -->
   <div class="modal-overlay" id="auth-login-modal" style="z-index: 9999; background: rgba(7, 16, 33, 0.95); backdrop-filter: blur(10px);">
-    <div class="modal-card" style="max-width: 440px; border-radius: 16px; border: 2px solid #38bdf8; box-shadow: 0 20px 50px rgba(0,0,0,0.8); background: linear-gradient(180deg, #0b1d3a 0%, #07152b 100%); color: white;">
+    <div class="modal-card" style="max-width: 420px; border-radius: 16px; border: 2px solid #38bdf8; box-shadow: 0 20px 50px rgba(0,0,0,0.8); background: linear-gradient(180deg, #0b1d3a 0%, #07152b 100%); color: white;">
       <div style="padding: 28px 24px 16px 24px; text-align: center;">
         <div style="display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 16px;">
           <img src="assets/pnp_badge.png" style="height: 50px; width: auto;" alt="PNP Badge" />
@@ -637,78 +614,27 @@
         <div style="font-size: 1.15rem; font-weight: 900; color: #e9c46a; letter-spacing: 1px; margin-top: 2px; text-transform: uppercase;">
           REGIONAL COMPTROLLERSHIP DIVISION
         </div>
-        <div style="font-size: 0.85rem; font-weight: 700; color: #38bdf8; margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-          <span>🔐 AUTHORIZED PERSONNEL LOGIN</span>
+        <div style="font-size: 0.85rem; font-weight: 700; color: #38bdf8; margin-top: 4px;">
+          🔐 AUTHORIZED PERSONNEL ACCESS
         </div>
       </div>
 
-      <form id="auth-login-form" onsubmit="event.preventDefault(); const email=document.getElementById('auth-email-input').value; const pass=document.getElementById('auth-pass-input').value; window.authManager.login(email, pass);" style="padding: 0 24px 28px 24px;">
-        <div style="margin-bottom: 14px;">
-          <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
-            Officer Email Address
-          </label>
-          <input type="email" id="auth-email-input" required placeholder="duty.pnco@pro4a.pnp.gov.ph" value="duty.pnco@pro4a.pnp.gov.ph" style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff;" autocomplete="email" />
-        </div>
-
+      <form id="auth-login-form" onsubmit="event.preventDefault(); window.authManager.login(document.getElementById('auth-pass-input').value);" style="padding: 0 24px 28px 24px;">
         <div style="margin-bottom: 16px;">
-          <label style="display: block; font-size: 0.78rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
-            Password
+          <label for="auth-pass-input" style="display: block; font-size: 0.78rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase; text-align:center;">
+            Security Passcode
           </label>
-          <input type="password" id="auth-pass-input" required placeholder="••••••••" value="PRO4A@2026" style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff;" autocomplete="current-password" />
+          <input type="password" id="auth-pass-input" required placeholder="Enter passcode" style="width: 100%; padding: 12px 16px; font-size: 1.05rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff; text-align:center; letter-spacing:2px;" autocomplete="current-password" autofocus />
         </div>
 
         <div id="auth-error-msg" style="display: none; padding: 8px 12px; background: rgba(220, 38, 38, 0.25); border: 1px solid #fca5a5; color: #fca5a5; border-radius: 6px; font-size: 0.82rem; font-weight: 700; text-align: center; margin-bottom: 14px;"></div>
 
         <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; font-size: 0.95rem; font-weight: 800; border-radius: 8px; justify-content: center; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); cursor: pointer;">
-          <span>🔑 Secure Officer Sign In</span>
+          <span>🔓 Unlock System</span>
         </button>
 
-        <div style="text-align: center; margin-top: 10px;">
-          <button type="button" onclick="if(window.app){ window.app.openChangeCredentialsModal(); }" style="background: none; border: none; color: #60a5fa; font-size: 0.8rem; font-weight: 700; text-decoration: underline; cursor: pointer;">
-            ⚙️ Change Email or Password
-          </button>
-        </div>
-
-        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 14px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
-          Authorized RCD Personnel Only • Protected by Firebase Security
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL: Change Officer Credentials (Email & Password) Modal -->
-  <div class="modal-overlay" id="change-credentials-modal">
-    <div class="modal-card" style="max-width: 460px;">
-      <div class="modal-header" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);">
-        <div class="modal-title">
-          <span>🔐 Change Officer Credentials</span>
-        </div>
-        <button class="modal-close">&times;</button>
-      </div>
-
-      <form id="change-credentials-form">
-        <div class="modal-body" style="padding: 20px;">
-          <div class="form-group" style="margin-bottom: 14px;">
-            <label style="font-weight: 700; color: #334155;">New Officer Email Address</label>
-            <input type="email" id="cred-new-email" required placeholder="duty.pnco@pro4a.pnp.gov.ph" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;" />
-          </div>
-
-          <div class="form-group" style="margin-bottom: 14px;">
-            <label style="font-weight: 700; color: #334155;">New Password</label>
-            <input type="password" id="cred-new-pass" required placeholder="Enter new password" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;" />
-          </div>
-
-          <div class="form-group" style="margin-bottom: 14px;">
-            <label style="font-weight: 700; color: #334155;">Confirm New Password</label>
-            <input type="password" id="cred-confirm-pass" required placeholder="Confirm new password" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1;" />
-          </div>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline btn-cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary">
-            <span>💾 Save New Credentials</span>
-          </button>
+        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 16px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
+          Authorized RCD Personnel Only
         </div>
       </form>
     </div>
@@ -737,93 +663,21 @@
     </div>
   </div>
 
-  <!-- MODAL: Soft Delete Confirmation Modal -->
-  <div class="modal-overlay" id="soft-delete-modal">
-    <div class="modal-card" style="max-width: 480px;">
-      <div class="modal-header" style="background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%);">
-        <div class="modal-title">
-          <span>🗑️ Confirm Soft Delete</span>
-        </div>
-        <button class="modal-close">&times;</button>
-      </div>
-
-      <form id="soft-delete-form">
-        <div class="modal-body">
-          <p style="font-size: 0.88rem; color: #475569; margin-bottom: 14px;">
-            Are you sure you want to remove this memorandum record? The record will be moved to the <strong>Recycle Bin</strong> and can be restored by an administrator.
-          </p>
-
-          <input type="hidden" id="delete-memo-id" />
-
-          <div class="form-group">
-            <label style="color:#991b1b; font-weight:700;">Reason for Deletion (Required)</label>
-            <textarea id="delete-reason-input" rows="3" required placeholder="e.g. Duplicate entry, Cancelled transaction, Data correction..."></textarea>
-          </div>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline btn-cancel">Cancel</button>
-          <button type="submit" class="btn btn-danger">
-            <span>🗑️ Move to Recycle Bin</span>
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- MODAL: Recycle Bin Modal -->
-  <div class="modal-overlay" id="recycle-bin-modal">
-    <div class="modal-card" style="max-width: 850px;">
-      <div class="modal-header" style="background: linear-gradient(135deg, #334155 0%, #1e293b 100%);">
-        <div class="modal-title">
-          <span>♻️ Admin Recycle Bin (Deleted Records)</span>
-        </div>
-        <button class="modal-close">&times;</button>
-      </div>
-
-      <div class="modal-body" style="padding: 15px;">
-        <div class="table-responsive">
-          <table class="memo-table">
-            <thead>
-              <tr>
-                <th>Control No.</th>
-                <th>Subject</th>
-                <th>Deleted Date</th>
-                <th>Deleted By</th>
-                <th>Reason</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="recycle-bin-table-body">
-              <!-- Rendered by JS -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline btn-cancel">Close</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Firebase Cloud Database & Auth SDK (v10.8.0) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <!-- Modular Infrastructure Scripts -->
   <script src="js/config.js?v=2.0"></script>
-  <script src="js/auth.js?v=2.0"></script>
+  <script src="js/auth.js?v=3.0"></script>
   <script src="js/storage.js?v=2.0"></script>
   <script src="js/validation.js?v=2.0"></script>
   <script src="js/audit.js?v=2.0"></script>
-  <script src="js/aging.js?v=2.0"></script>
   <script src="js/ui.js?v=2.0"></script>
 
-  <!-- Full Google Sheets Dataset (1,210 Records) -->
+  <!-- Full Google Sheets Dataset (1,207 Records) -->
   <script src="js/memos_data.js?v=12.0"></script>
   <!-- Application Logic -->
-  <script src="js/app.js?v=12.0"></script>
+  <script src="js/app.js?v=13.0"></script>
 </body>
 </html>

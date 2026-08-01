@@ -1,45 +1,34 @@
 /**
- * Authentication & Role-Based Access Control (RBAC) Module
+ * Password-only access module
  * RCD Memorandum Monitoring System (PRO 4A)
+ *
+ * Default passcode: PRO4A2026
+ * This provides a simple shared lock for the static GitHub Pages version.
  */
 
 class AuthManager {
   constructor() {
-    this.auth = null;
-    this.db = null;
     this.currentUser = null;
     this.currentProfile = null;
     this.onAuthChangeCallbacks = [];
+    this.sessionKey = "RCD_MEMO_AUTH_LOCAL";
+    this.passcodeKey = "RCD_CUSTOM_PASSCODE";
+    this.defaultPasscode = "PRO4A2026";
   }
 
-  init(firebaseApp) {
-    if (typeof firebase === "undefined" || !firebaseApp) return;
+  init() {
+    const isAuthenticated = sessionStorage.getItem(this.sessionKey) === "true";
 
-    this.auth = firebase.auth();
-    this.db = firebase.firestore();
+    if (isAuthenticated) {
+      this.setAuthorizedSession();
+      this.updateAuthUI(true);
+    } else {
+      this.currentUser = null;
+      this.currentProfile = null;
+      this.updateAuthUI(false);
+    }
 
-    this.auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        this.currentUser = user;
-        this.currentProfile = await this.fetchUserProfile(user.uid, user.email, user.displayName);
-        this.updateAuthUI(true);
-      } else {
-        const isLocalAuth = sessionStorage.getItem("RCD_MEMO_AUTH_LOCAL") === "true";
-        if (isLocalAuth) {
-          this.currentUser = { uid: "officer_duty", email: "duty.pnco@pro4a.pnp.gov.ph" };
-          this.currentProfile = this.getDefaultProfile("duty.pnco@pro4a.pnp.gov.ph", "Duty PNCO");
-          this.updateAuthUI(true);
-        } else {
-          this.currentUser = null;
-          this.currentProfile = null;
-          this.updateAuthUI(false);
-        }
-      }
-
-      this.onAuthChangeCallbacks.forEach(cb => {
-        try { cb(this.currentUser, this.currentProfile); } catch (e) { console.error("Auth callback err:", e); }
-      });
-    });
+    this.notifyAuthChange();
   }
 
   onAuthStateChanged(callback) {
@@ -48,85 +37,86 @@ class AuthManager {
     }
   }
 
-  async fetchUserProfile(uid, email, displayName) {
-    if (!this.db) return this.getDefaultProfile(email, displayName);
-
-    try {
-      const docRef = this.db.collection("users").doc(uid);
-      const doc = await docRef.get();
-
-      if (doc.exists) {
-        return doc.data();
-      } else {
-        const defaultRole = (email && email.toLowerCase().includes("admin")) ? "admin" : "records_admin";
-        const newProfile = {
-          uid: uid,
-          displayName: displayName || email.split("@")[0].toUpperCase() || "Authorized Officer",
-          email: email || "",
-          role: defaultRole,
-          section: "RCD",
-          active: true,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        await docRef.set(newProfile, { merge: true });
-        return newProfile;
-      }
-    } catch (e) {
-      console.warn("Could not fetch user profile from Firestore users collection:", e);
-      return this.getDefaultProfile(email, displayName);
-    }
+  getActivePasscode() {
+    return localStorage.getItem(this.passcodeKey) || this.defaultPasscode;
   }
 
-  getDefaultProfile(email, displayName) {
-    const defaultEmail = window.APP_CONFIG?.DEFAULT_AUTH?.DEFAULT_EMAIL || "duty.pnco@pro4a.pnp.gov.ph";
-    return {
-      displayName: displayName || (email ? email.split("@")[0].toUpperCase() : "Duty PNCO"),
-      email: email || defaultEmail,
+  setAuthorizedSession() {
+    this.currentUser = {
+      uid: "local_rcd_authorized_user",
+      email: ""
+    };
+
+    this.currentProfile = {
+      displayName: "Authorized RCD Personnel",
+      email: "",
       role: "records_admin",
       section: "RCD",
       active: true
     };
   }
 
-  async login(email, password) {
-    const defaultEmail = window.APP_CONFIG?.DEFAULT_AUTH?.DEFAULT_EMAIL || "duty.pnco@pro4a.pnp.gov.ph";
-    const cleanEmail = email ? email.trim() : defaultEmail;
-    const cleanPass = password ? password.trim() : "";
+  login(passcode) {
+    const enteredPasscode = String(passcode || "").trim();
+    const errorEl = document.getElementById("auth-error-msg");
 
-    // Instantly set authenticated state so user is never blocked
-    this.currentUser = { uid: "officer_duty", email: cleanEmail };
-    this.currentProfile = this.getDefaultProfile(cleanEmail, "Duty PNCO");
-    sessionStorage.setItem("RCD_MEMO_AUTH_LOCAL", "true");
-    this.updateAuthUI(true);
-
-    // Background Firebase Auth registration/login if online
-    if (this.auth) {
-      try {
-        const res = await this.auth.signInWithEmailAndPassword(cleanEmail, cleanPass);
-        if (res && res.user) this.currentUser = res.user;
-      } catch (err) {
-        if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential" || err.code === "auth/operation-not-allowed") {
-          try {
-            const newRes = await this.auth.createUserWithEmailAndPassword(cleanEmail, cleanPass);
-            if (newRes && newRes.user) this.currentUser = newRes.user;
-          } catch (createErr) {
-            console.warn("Firebase Auth background registration notice:", createErr);
-          }
-        }
-      }
+    if (errorEl) {
+      errorEl.style.display = "none";
+      errorEl.textContent = "";
     }
 
-    return { user: this.currentUser };
+    if (!enteredPasscode) {
+      this.showLoginError("Please enter the security passcode.");
+      return false;
+    }
+
+    if (enteredPasscode !== this.getActivePasscode()) {
+      this.showLoginError("Incorrect security passcode.");
+      const input = document.getElementById("auth-pass-input");
+      if (input) {
+        input.value = "";
+        input.focus();
+      }
+      return false;
+    }
+
+    sessionStorage.setItem(this.sessionKey, "true");
+    this.setAuthorizedSession();
+    this.updateAuthUI(true);
+    this.notifyAuthChange();
+    return true;
   }
 
-  async logout() {
-    sessionStorage.removeItem("RCD_MEMO_AUTH_LOCAL");
-    if (this.auth) {
-      try { await this.auth.signOut(); } catch (e) {}
-    }
+  logout() {
+    sessionStorage.removeItem(this.sessionKey);
     this.currentUser = null;
     this.currentProfile = null;
     this.updateAuthUI(false);
+    this.notifyAuthChange();
+
+    const input = document.getElementById("auth-pass-input");
+    if (input) {
+      input.value = "";
+      setTimeout(() => input.focus(), 50);
+    }
+  }
+
+  showLoginError(message) {
+    const errorEl = document.getElementById("auth-error-msg");
+    if (errorEl) {
+      errorEl.textContent = message;
+      errorEl.style.display = "block";
+    }
+  }
+
+  notifyAuthChange() {
+    this.onAuthChangeCallbacks.forEach((callback) => {
+      try {
+        callback(this.currentUser, this.currentProfile);
+      } catch (error) {
+        console.error("Authentication callback error:", error);
+      }
+    });
   }
 
   get userRole() {
@@ -134,26 +124,23 @@ class AuthManager {
   }
 
   hasRole(roleOrRoles) {
-    if (!this.currentProfile || !this.currentProfile.active) return true; // Default allow for active session
-    const role = this.userRole;
-    if (role === APP_CONFIG.ROLES.ADMIN) return true;
-
-    if (Array.isArray(roleOrRoles)) {
-      return roleOrRoles.includes(role);
-    }
-    return role === roleOrRoles;
+    if (!this.currentProfile || !this.currentProfile.active) return false;
+    if (this.userRole === "admin") return true;
+    return Array.isArray(roleOrRoles)
+      ? roleOrRoles.includes(this.userRole)
+      : this.userRole === roleOrRoles;
   }
 
   canCreate() {
-    return true;
+    return Boolean(this.currentProfile?.active);
   }
 
   canEdit() {
-    return true;
+    return Boolean(this.currentProfile?.active);
   }
 
   canDelete() {
-    return true;
+    return Boolean(this.currentProfile?.active);
   }
 
   updateAuthUI(isAuthenticated) {
@@ -168,8 +155,8 @@ class AuthManager {
         loginModal.style.setProperty("display", "none", "important");
       }
       if (userBadge) userBadge.style.display = "flex";
-      if (userNameEl) userNameEl.textContent = this.currentProfile?.displayName || "Duty PNCO";
-      if (userRoleEl) userRoleEl.textContent = (this.userRole || "RECORDS_ADMIN").toUpperCase();
+      if (userNameEl) userNameEl.textContent = this.currentProfile?.displayName || "Authorized RCD Personnel";
+      if (userRoleEl) userRoleEl.textContent = "AUTHORIZED";
     } else {
       if (loginModal) {
         loginModal.classList.add("active");

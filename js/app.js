@@ -41,7 +41,7 @@ class MemoMonitoringApp {
         firebase.initializeApp(APP_CONFIG.FIREBASE);
       }
       this.db = firebase.firestore();
-      if (window.authManager) window.authManager.init(firebase.app());
+      if (window.authManager) window.authManager.init();
       if (window.auditManager) window.auditManager.init(this.db);
       this.listenFirebaseSync();
     } catch (e) {
@@ -56,8 +56,7 @@ class MemoMonitoringApp {
     }
 
     try {
-      const seed = this.getInitialMemos();
-      const memosToSync = (this.memos && this.memos.length >= seed.length) ? this.memos : seed;
+      const memosToSync = this.memos && this.memos.length > 0 ? this.memos : this.getInitialMemos();
       let count = 0;
 
       // Firestore Batch Sync (Chunks of 400 per batch)
@@ -134,19 +133,41 @@ class MemoMonitoringApp {
     return [];
   }
 
+  populateOfficeFilter() {
+    if (!this.officeFilter) return;
+
+    const currentValue = this.officeFilter.value || "ALL";
+    const offices = Array.from(
+      new Set(
+        (this.memos || [])
+          .map(memo => memo && memo.originatingOffice)
+          .filter(Boolean)
+      )
+    ).sort((a, b) => String(a).localeCompare(String(b)));
+
+    this.officeFilter.innerHTML = "";
+
+    const allOption = document.createElement("option");
+    allOption.value = "ALL";
+    allOption.textContent = "All Originating Offices";
+    this.officeFilter.appendChild(allOption);
+
+    offices.forEach((office) => {
+      const option = document.createElement("option");
+      option.value = office;
+      option.textContent = office;
+      this.officeFilter.appendChild(option);
+    });
+
+    this.officeFilter.value = offices.includes(currentValue) ? currentValue : "ALL";
+  }
+
   loadMemos() {
-    let memos = [];
     if (window.storageManager) {
       const raw = window.storageManager.loadLocalMemos();
-      if (Array.isArray(raw) && raw.length > 0) {
-        memos = raw.map(m => window.storageManager.normalizeMemo(m));
-      }
+      return raw.map(m => window.storageManager.normalizeMemo(m));
     }
-    const seed = this.getInitialMemos();
-    if (!memos || memos.length < seed.length) {
-      memos = seed;
-    }
-    return memos;
+    return this.getInitialMemos();
   }
 
   saveMemos() {
@@ -169,31 +190,6 @@ class MemoMonitoringApp {
     this.populateOfficeFilter();
     this.renderStats();
     this.renderTable();
-  }
-
-  populateOfficeFilter() {
-    if (!this.officeFilter) return;
-
-    const offices = new Set();
-    if (Array.isArray(this.memos)) {
-      this.memos.forEach(m => {
-        if (m && m.originatingOffice && m.originatingOffice.trim()) {
-          offices.add(m.originatingOffice.trim());
-        }
-      });
-    }
-
-    const sortedOffices = Array.from(offices).sort();
-    let html = `<option value="ALL">All Originating Offices</option>`;
-    sortedOffices.forEach(off => {
-      html += `<option value="${off}">${off}</option>`;
-    });
-
-    const currentValue = this.officeFilter ? this.officeFilter.value : "ALL";
-    this.officeFilter.innerHTML = html;
-    if (currentValue && sortedOffices.includes(currentValue)) {
-      this.officeFilter.value = currentValue;
-    }
   }
 
   initElements() {
@@ -248,25 +244,6 @@ class MemoMonitoringApp {
     this.videoEl = document.getElementById("camera-video");
     this.canvasEl = document.getElementById("camera-canvas");
     this.snapGallery = document.getElementById("snap-gallery");
-
-    // Load custom credentials if set by user
-    const customEmail = localStorage.getItem("RCD_CUSTOM_AUTH_EMAIL");
-    const customPass = localStorage.getItem("RCD_CUSTOM_AUTH_PASS");
-    if (customEmail) {
-      const authEmailInput = document.getElementById("auth-email-input");
-      if (authEmailInput) authEmailInput.value = customEmail;
-      if (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_AUTH) window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_EMAIL = customEmail;
-    }
-    if (customPass) {
-      const authPassInput = document.getElementById("auth-pass-input");
-      if (authPassInput) authPassInput.value = customPass;
-      if (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_AUTH) {
-        window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_PASSWORD = customPass;
-        if (!window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.includes(customPass)) {
-          window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.push(customPass);
-        }
-      }
-    }
   }
 
   bindEvents() {
@@ -282,26 +259,20 @@ class MemoMonitoringApp {
     }
 
     // Search & Filter
-    if (this.searchInput) {
-      this.searchInput.addEventListener("input", (e) => {
-        this.currentSearchTerm = e.target.value.toLowerCase();
-        this.renderTable();
-      });
-    }
+    this.searchInput.addEventListener("input", (e) => {
+      this.currentSearchTerm = e.target.value.toLowerCase();
+      this.renderTable();
+    });
 
-    if (this.officeFilter) {
-      this.officeFilter.addEventListener("change", (e) => {
-        this.currentFilterOffice = e.target.value;
-        this.renderTable();
-      });
-    }
+    this.officeFilter.addEventListener("change", (e) => {
+      this.currentFilterOffice = e.target.value;
+      this.renderTable();
+    });
 
-    if (this.statusFilter) {
-      this.statusFilter.addEventListener("change", (e) => {
-        this.currentFilterStatus = e.target.value;
-        this.renderTable();
-      });
-    }
+    this.statusFilter.addEventListener("change", (e) => {
+      this.currentFilterStatus = e.target.value;
+      this.renderTable();
+    });
 
     if (this.sortOrderSelect) {
       this.sortOrderSelect.addEventListener("change", (e) => {
@@ -401,9 +372,7 @@ class MemoMonitoringApp {
     });
 
     // Form Submit
-    if (this.memoForm) {
-      this.memoForm.addEventListener("submit", (e) => this.handleMemoSubmit(e));
-    }
+    this.memoForm.addEventListener("submit", (e) => this.handleMemoSubmit(e));
 
     // OCR Dropzone & File Input
     const dropzone = document.getElementById("ocr-dropzone");
@@ -466,73 +435,14 @@ class MemoMonitoringApp {
       });
     }
 
-    // Soft Delete Form Submit
-    document.getElementById("soft-delete-form")?.addEventListener("submit", (e) => this.handleSoftDeleteSubmit(e));
-
-    // Change Credentials Form Submit
-    document.getElementById("change-credentials-form")?.addEventListener("submit", (e) => this.handleChangeCredentialsSubmit(e));
+    // Multi-page Snap & Upload
+    document.getElementById("btn-snap-page").addEventListener("click", () => this.snapPage());
+    document.getElementById("btn-upload-drive").addEventListener("click", () => this.compileAndGenerateDriveLink());
 
     // Modal Closes
     document.querySelectorAll(".modal-close, .btn-cancel").forEach((btn) => {
       btn.addEventListener("click", () => this.closeAllModals());
     });
-  }
-
-  openChangeCredentialsModal() {
-    this.closeAllModals();
-    const modal = document.getElementById("change-credentials-modal");
-    const currentEmail = localStorage.getItem("RCD_CUSTOM_AUTH_EMAIL") || window.APP_CONFIG?.DEFAULT_AUTH?.DEFAULT_EMAIL || "duty.pnco@pro4a.pnp.gov.ph";
-    const currentPass = localStorage.getItem("RCD_CUSTOM_AUTH_PASS") || window.APP_CONFIG?.DEFAULT_AUTH?.DEFAULT_PASSWORD || "PRO4A@2026";
-
-    const emailInput = document.getElementById("cred-new-email");
-    const passInput = document.getElementById("cred-new-pass");
-    const confirmInput = document.getElementById("cred-confirm-pass");
-
-    if (emailInput) emailInput.value = currentEmail;
-    if (passInput) passInput.value = currentPass;
-    if (confirmInput) confirmInput.value = currentPass;
-
-    if (modal) modal.classList.add("active");
-  }
-
-  handleChangeCredentialsSubmit(e) {
-    if (e) e.preventDefault();
-    const newEmail = document.getElementById("cred-new-email").value.trim();
-    const newPass = document.getElementById("cred-new-pass").value.trim();
-    const confirmPass = document.getElementById("cred-confirm-pass").value.trim();
-
-    if (!newEmail || !newPass) {
-      if (window.uiManager) window.uiManager.showToast("Email and password cannot be empty.", "error");
-      return;
-    }
-
-    if (newPass !== confirmPass) {
-      if (window.uiManager) window.uiManager.showToast("Passwords do not match. Please verify.", "error");
-      return;
-    }
-
-    // Save custom credentials in localStorage & update APP_CONFIG
-    localStorage.setItem("RCD_CUSTOM_AUTH_EMAIL", newEmail);
-    localStorage.setItem("RCD_CUSTOM_AUTH_PASS", newPass);
-
-    if (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_AUTH) {
-      window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_EMAIL = newEmail;
-      window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_PASSWORD = newPass;
-      if (!window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.includes(newPass)) {
-        window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.push(newPass);
-      }
-    }
-
-    // Update login form prefill inputs
-    const authEmailInput = document.getElementById("auth-email-input");
-    const authPassInput = document.getElementById("auth-pass-input");
-    if (authEmailInput) authEmailInput.value = newEmail;
-    if (authPassInput) authPassInput.value = newPass;
-
-    this.closeAllModals();
-    if (window.uiManager) {
-      window.uiManager.showToast(`✅ Credentials updated! New email: ${newEmail}`, "success");
-    }
   }
 
   startClock() {
@@ -560,37 +470,8 @@ class MemoMonitoringApp {
     this.statDrive.textContent = driveDocs;
   }
 
-  filterType(type) {
-    this.currentMemoType = type || "ALL";
-
-    document.querySelectorAll(".nav-tab").forEach(tab => {
-      tab.style.background = "transparent";
-      tab.style.color = "#cbd5e1";
-    });
-
-    const activeTabId = type === "INCOMING" ? "tab-incoming" : type === "OUTGOING" ? "tab-outgoing" : "tab-all";
-    const activeTab = document.getElementById(activeTabId);
-    if (activeTab) {
-      activeTab.style.background = "#1e3a8a";
-      activeTab.style.color = "#ffffff";
-    }
-
-    this.renderTable();
-  }
-
   renderTable() {
     let filtered = this.memos.filter((memo) => {
-      // Exclude Soft-Deleted Memos from main logbook
-      if (memo.isDeleted === true) return false;
-
-      // Memo Type Navigation Filter (ALL vs INCOMING vs OUTGOING)
-      if (this.currentMemoType === "INCOMING" && memo.memoType !== "INCOMING") {
-        return false;
-      }
-      if (this.currentMemoType === "OUTGOING" && memo.memoType !== "OUTGOING") {
-        return false;
-      }
-
       // Office Filter
       if (this.currentFilterOffice !== "ALL" && memo.originatingOffice !== this.currentFilterOffice) {
         return false;
@@ -612,7 +493,7 @@ class MemoMonitoringApp {
       return true;
     });
 
-    // Sort Order
+    // Sort Order requested by User: Latest / Newest Memos First by default
     filtered.sort((a, b) => {
       const dateA = new Date(a.dateLogged).getTime() || 0;
       const dateB = new Date(b.dateLogged).getTime() || 0;
@@ -623,14 +504,14 @@ class MemoMonitoringApp {
         if (dateA !== dateB) return dateA - dateB;
         return numA - numB;
       } else {
+        // Default: NEWEST (Latest Memos First)
         if (dateB !== dateA) return dateB - dateA;
         return numB - numA;
       }
     });
 
-    const activeTotal = this.memos.filter(m => !m.isDeleted).length;
     this.currentFilteredMemos = filtered;
-    this.tableCountEl.textContent = `Showing ${filtered.length} of ${activeTotal} Memorandum Records`;
+    this.tableCountEl.textContent = `Showing ${filtered.length} of ${this.memos.length} Memorandum Records`;
     this.tableBody.innerHTML = "";
 
     if (filtered.length === 0) {
@@ -641,16 +522,19 @@ class MemoMonitoringApp {
     filtered.forEach((memo) => {
       const tr = document.createElement("tr");
 
+      // Row Status Color Rules requested by User:
+      // - GREEN: Transmitted out of RCD (memo has exited RCD / transmitted to target office)
+      // - LIGHT RED / PINK: Incoming / Pending inside RCD (has not yet exited RCD)
       const isTransmittedOut = memo.remarksStatus === "Transmitted to" || (memo.transmittedOffice && memo.transmittedOffice.trim().length > 2);
       const isConcurredOrApproved = memo.remarksStatus.includes("Concur") || memo.remarksStatus.includes("Approved") || memo.remarksStatus.includes("Signed");
 
       if (isTransmittedOut) {
-        tr.className = "row-transmitted";
+        tr.className = "row-transmitted"; // Light Green row
       } else {
-        tr.className = "row-pending-rcd";
+        tr.className = "row-pending-rcd"; // Light Red / Coral Pink row (Inside RCD)
       }
 
-      // Status Badge & Working-day aging status
+      // Status Badge Style
       let statusBadgeHtml = "";
       if (isTransmittedOut) {
         statusBadgeHtml = `<span class="badge-status status-transmitted">🟢 Transmitted</span>`;
@@ -659,9 +543,6 @@ class MemoMonitoringApp {
       } else {
         statusBadgeHtml = `<span class="badge-status status-pending">🔴 Inside RCD</span>`;
       }
-
-      const agingInfo = window.agingManager ? window.agingManager.getAgingStatus(memo) : { text: "" };
-      const agingHtml = agingInfo.text ? `<span style="display:inline-block; margin-top:3px; padding:2px 6px; border-radius:4px; font-size:0.68rem; font-weight:800; background:#f1f5f9; color:#334155;">⏱️ ${agingInfo.text}</span>` : '';
 
       tr.innerHTML = `
         <td style="text-align:center;"><input type="checkbox" class="memo-checkbox" data-id="${memo.id}" ${this.selectedMemoIds.has(memo.id) ? 'checked' : ''} /></td>
@@ -672,7 +553,6 @@ class MemoMonitoringApp {
         <td class="subject-cell">
           <span class="subject-title">${memo.subject}</span>
           <span class="subject-meta">Ref ID: ${memo.id} | ${memo.pages || 1} Page(s)</span>
-          ${agingHtml}
         </td>
         <td><span style="font-weight:700;">${memo.actionRequired}</span></td>
         <td>
@@ -1842,99 +1722,6 @@ class MemoMonitoringApp {
   closeAllModals() {
     document.querySelectorAll(".modal-overlay").forEach(m => m.classList.remove("active"));
     this.stopWebcam();
-  }
-
-  deleteMemo(id) {
-    const memo = this.memos.find(m => m.id === id);
-    if (!memo) return;
-
-    this.closeAllModals();
-    const modal = document.getElementById("soft-delete-modal");
-    document.getElementById("delete-memo-id").value = id;
-    document.getElementById("delete-reason-input").value = "";
-    if (modal) modal.classList.add("active");
-  }
-
-  handleSoftDeleteSubmit(e) {
-    if (e) e.preventDefault();
-    const id = document.getElementById("delete-memo-id").value;
-    const reason = document.getElementById("delete-reason-input").value.trim();
-
-    if (!reason) {
-      if (window.uiManager) window.uiManager.showToast("Please enter a reason for deletion.", "error");
-      return;
-    }
-
-    const memo = this.memos.find(m => m.id === id);
-    if (memo) {
-      memo.isDeleted = true;
-      memo.deletedAt = new Date().toISOString();
-      memo.deletedByUid = window.authManager?.currentUser?.uid || "duty_officer";
-      memo.deleteReason = reason;
-
-      this.saveMemos();
-      this.closeAllModals();
-
-      if (window.auditManager) {
-        window.auditManager.logAction(id, "SOFT_DELETE", { reason }, `Moved record ${id} to Recycle Bin`);
-      }
-      if (window.uiManager) {
-        window.uiManager.showToast(`🗑️ Record ${id} moved to Recycle Bin`, "info");
-      }
-    }
-  }
-
-  openRecycleBinModal() {
-    this.closeAllModals();
-    const modal = document.getElementById("recycle-bin-modal");
-    const tbody = document.getElementById("recycle-bin-table-body");
-    const deletedMemos = this.memos.filter(m => m.isDeleted === true);
-
-    if (tbody) {
-      tbody.innerHTML = "";
-      if (deletedMemos.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#64748b;">No deleted records in Recycle Bin.</td></tr>`;
-      } else {
-        deletedMemos.forEach(m => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td><strong>${m.id}</strong></td>
-            <td style="max-width:250px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${m.subject}</td>
-            <td style="font-size:0.78rem;">${m.deletedAt ? new Date(m.deletedAt).toLocaleDateString() : 'N/A'}</td>
-            <td>${m.deletedByUid || 'System User'}</td>
-            <td style="font-style:italic; font-size:0.8rem; max-width:180px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${m.deleteReason || 'No reason'}</td>
-            <td>
-              <button class="btn btn-primary btn-sm" onclick="app.restoreMemo('${m.id}')" style="padding:2px 8px; font-size:0.75rem;">
-                🔄 Restore
-              </button>
-            </td>
-          `;
-          tbody.appendChild(tr);
-        });
-      }
-    }
-
-    if (modal) modal.classList.add("active");
-  }
-
-  restoreMemo(id) {
-    const memo = this.memos.find(m => m.id === id);
-    if (memo) {
-      memo.isDeleted = false;
-      memo.deletedAt = "";
-      memo.deletedByUid = "";
-      memo.deleteReason = "";
-
-      this.saveMemos();
-      this.openRecycleBinModal();
-
-      if (window.auditManager) {
-        window.auditManager.logAction(id, "RESTORE", {}, `Restored record ${id} from Recycle Bin`);
-      }
-      if (window.uiManager) {
-        window.uiManager.showToast(`✅ Restored record ${id} back to active logbook!`, "success");
-      }
-    }
   }
 }
 
