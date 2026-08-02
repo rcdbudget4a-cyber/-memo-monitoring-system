@@ -1,0 +1,26 @@
+{
+  "name": "rcd-memo-monitoring-system",
+  "version": "2.0.0",
+  "description": "Office of the Regional Comptrollership Division - Incoming/Outgoing Memorandum Monitoring System (PRO 4A)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "npx wrangler pages dev .",
+    "deploy": "npx wrangler pages deploy . --project-name=rcd-memo-monitoring-system",
+    "build": "echo 'No build step required for static SPA site'"
+  },
+  "keywords": [
+    "pnp",
+    "pro4a",
+    "rcd",
+    "memo-monitoring",
+    "cloudflare",
+    "cloudflare-pages",
+    "wrangler"
+  ],
+  "author": "PRO 4A RCD",
+  "license": "ISC",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

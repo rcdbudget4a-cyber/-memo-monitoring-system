@@ -33,6 +33,19 @@ const APP_CONFIG = {
   GOOGLE_SHEET_RCD_CSV: "https://docs.google.com/spreadsheets/d/166VH0J3B0kY9MBvP37x9NtV32Vsk_y0kDqfQrutRcxA/gviz/tq?tqx=out:csv&gid=767216694",
   GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxvhr0U3IWOhOLYLdWZFSRL-Q8otNf4gTPSkBgsD82CrNPJ9xowvuMsUgFLSNAsvAPIUg/exec",
 
+  // Cloudflare Pages & Worker Integration
+  CLOUDFLARE: {
+    ENABLED: true,
+    HEALTH_ENDPOINT: "/api/health"
+  },
+
+  // Default Officer Credentials & Passcodes
+  DEFAULT_AUTH: {
+    DEFAULT_EMAIL: "duty.pnco@pro4a.pnp.gov.ph",
+    DEFAULT_PASSWORD: "RCD@2026",
+    VALID_PASSCODES: ["RCD@2026", "PRO4A@2026"]
+  },
+
   // Supported User Roles & Permissions
   ROLES: {
     ADMIN: "admin",                // Full system administration & soft-delete restore

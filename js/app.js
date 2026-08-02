@@ -41,7 +41,7 @@ class MemoMonitoringApp {
         firebase.initializeApp(APP_CONFIG.FIREBASE);
       }
       this.db = firebase.firestore();
-      if (window.authManager) window.authManager.init();
+      if (window.authManager) window.authManager.init(firebase.app());
       if (window.auditManager) window.auditManager.init(this.db);
       this.listenFirebaseSync();
     } catch (e) {
@@ -56,7 +56,8 @@ class MemoMonitoringApp {
     }
 
     try {
-      const memosToSync = this.memos && this.memos.length > 0 ? this.memos : this.getInitialMemos();
+      const seed = this.getInitialMemos();
+      const memosToSync = (this.memos && this.memos.length >= seed.length) ? this.memos : seed;
       let count = 0;
 
       // Firestore Batch Sync (Chunks of 400 per batch)
@@ -133,41 +134,19 @@ class MemoMonitoringApp {
     return [];
   }
 
-  populateOfficeFilter() {
-    if (!this.officeFilter) return;
-
-    const currentValue = this.officeFilter.value || "ALL";
-    const offices = Array.from(
-      new Set(
-        (this.memos || [])
-          .map(memo => memo && memo.originatingOffice)
-          .filter(Boolean)
-      )
-    ).sort((a, b) => String(a).localeCompare(String(b)));
-
-    this.officeFilter.innerHTML = "";
-
-    const allOption = document.createElement("option");
-    allOption.value = "ALL";
-    allOption.textContent = "All Originating Offices";
-    this.officeFilter.appendChild(allOption);
-
-    offices.forEach((office) => {
-      const option = document.createElement("option");
-      option.value = office;
-      option.textContent = office;
-      this.officeFilter.appendChild(option);
-    });
-
-    this.officeFilter.value = offices.includes(currentValue) ? currentValue : "ALL";
-  }
-
   loadMemos() {
+    let memos = [];
     if (window.storageManager) {
       const raw = window.storageManager.loadLocalMemos();
-      return raw.map(m => window.storageManager.normalizeMemo(m));
+      if (Array.isArray(raw) && raw.length > 0) {
+        memos = raw.map(m => window.storageManager.normalizeMemo(m));
+      }
     }
-    return this.getInitialMemos();
+    const seed = this.getInitialMemos();
+    if (!memos || memos.length < seed.length) {
+      memos = seed;
+    }
+    return memos;
   }
 
   saveMemos() {
@@ -190,6 +169,31 @@ class MemoMonitoringApp {
     this.populateOfficeFilter();
     this.renderStats();
     this.renderTable();
+  }
+
+  populateOfficeFilter() {
+    if (!this.officeFilter) return;
+
+    const offices = new Set();
+    if (Array.isArray(this.memos)) {
+      this.memos.forEach(m => {
+        if (m && m.originatingOffice && m.originatingOffice.trim()) {
+          offices.add(m.originatingOffice.trim());
+        }
+      });
+    }
+
+    const sortedOffices = Array.from(offices).sort();
+    let html = `<option value="ALL">All Originating Offices</option>`;
+    sortedOffices.forEach(off => {
+      html += `<option value="${off}">${off}</option>`;
+    });
+
+    const currentValue = this.officeFilter ? this.officeFilter.value : "ALL";
+    this.officeFilter.innerHTML = html;
+    if (currentValue && sortedOffices.includes(currentValue)) {
+      this.officeFilter.value = currentValue;
+    }
   }
 
   initElements() {
@@ -244,6 +248,25 @@ class MemoMonitoringApp {
     this.videoEl = document.getElementById("camera-video");
     this.canvasEl = document.getElementById("camera-canvas");
     this.snapGallery = document.getElementById("snap-gallery");
+
+    // Load custom credentials if set by user
+    const customEmail = localStorage.getItem("RCD_CUSTOM_AUTH_EMAIL");
+    const customPass = localStorage.getItem("RCD_CUSTOM_AUTH_PASS");
+    if (customEmail) {
+      const authEmailInput = document.getElementById("auth-email-input");
+      if (authEmailInput) authEmailInput.value = customEmail;
+      if (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_AUTH) window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_EMAIL = customEmail;
+    }
+    if (customPass) {
+      const authPassInput = document.getElementById("auth-pass-input");
+      if (authPassInput) authPassInput.value = customPass;
+      if (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_AUTH) {
+        window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_PASSWORD = customPass;
+        if (!window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.includes(customPass)) {
+          window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.push(customPass);
+        }
+      }
+    }
   }
 
   bindEvents() {
@@ -259,20 +282,26 @@ class MemoMonitoringApp {
     }
 
     // Search & Filter
-    this.searchInput.addEventListener("input", (e) => {
-      this.currentSearchTerm = e.target.value.toLowerCase();
-      this.renderTable();
-    });
+    if (this.searchInput) {
+      this.searchInput.addEventListener("input", (e) => {
+        this.currentSearchTerm = e.target.value.toLowerCase();
+        this.renderTable();
+      });
+    }
 
-    this.officeFilter.addEventListener("change", (e) => {
-      this.currentFilterOffice = e.target.value;
-      this.renderTable();
-    });
+    if (this.officeFilter) {
+      this.officeFilter.addEventListener("change", (e) => {
+        this.currentFilterOffice = e.target.value;
+        this.renderTable();
+      });
+    }
 
-    this.statusFilter.addEventListener("change", (e) => {
-      this.currentFilterStatus = e.target.value;
-      this.renderTable();
-    });
+    if (this.statusFilter) {
+      this.statusFilter.addEventListener("change", (e) => {
+        this.currentFilterStatus = e.target.value;
+        this.renderTable();
+      });
+    }
 
     if (this.sortOrderSelect) {
       this.sortOrderSelect.addEventListener("change", (e) => {
@@ -283,8 +312,11 @@ class MemoMonitoringApp {
 
     // Toolbar buttons & Card actions
     document.getElementById("btn-new-memo")?.addEventListener("click", () => this.openMemoModal());
+    document.getElementById("btn-add-memo")?.addEventListener("click", () => this.openMemoModal());
     document.getElementById("btn-rcd-memo")?.addEventListener("click", () => this.openRcdMemoModal());
+    document.getElementById("btn-input-rcd")?.addEventListener("click", () => this.openRcdMemoModal());
     document.getElementById("btn-ocr-scan")?.addEventListener("click", () => this.openOcrModal());
+    document.getElementById("btn-scan-ocr")?.addEventListener("click", () => this.openOcrModal());
     document.getElementById("btn-multi-camera")?.addEventListener("click", () => this.openCameraModal());
     document.getElementById("btn-export-excel")?.addEventListener("click", () => this.exportToExcel());
     document.getElementById("btn-print-journal")?.addEventListener("click", () => this.openJournalModal());
@@ -372,7 +404,9 @@ class MemoMonitoringApp {
     });
 
     // Form Submit
-    this.memoForm.addEventListener("submit", (e) => this.handleMemoSubmit(e));
+    if (this.memoForm) {
+      this.memoForm.addEventListener("submit", (e) => this.handleMemoSubmit(e));
+    }
 
     // OCR Dropzone & File Input
     const dropzone = document.getElementById("ocr-dropzone");
@@ -435,14 +469,73 @@ class MemoMonitoringApp {
       });
     }
 
-    // Multi-page Snap & Upload
-    document.getElementById("btn-snap-page").addEventListener("click", () => this.snapPage());
-    document.getElementById("btn-upload-drive").addEventListener("click", () => this.compileAndGenerateDriveLink());
+    // Soft Delete Form Submit
+    document.getElementById("soft-delete-form")?.addEventListener("submit", (e) => this.handleSoftDeleteSubmit(e));
+
+    // Change Credentials Form Submit
+    document.getElementById("change-credentials-form")?.addEventListener("submit", (e) => this.handleChangeCredentialsSubmit(e));
 
     // Modal Closes
     document.querySelectorAll(".modal-close, .btn-cancel").forEach((btn) => {
       btn.addEventListener("click", () => this.closeAllModals());
     });
+  }
+
+  openChangeCredentialsModal() {
+    this.closeAllModals();
+    const modal = document.getElementById("change-credentials-modal");
+    const prevInput = document.getElementById("cred-prev-pass");
+    const passInput = document.getElementById("cred-new-pass");
+    const confirmInput = document.getElementById("cred-confirm-pass");
+
+    if (prevInput) prevInput.value = "";
+    if (passInput) passInput.value = "";
+    if (confirmInput) confirmInput.value = "";
+
+    if (modal) {
+      modal.classList.add("active");
+      if (prevInput) setTimeout(() => prevInput.focus(), 100);
+    }
+  }
+
+  async handleChangeCredentialsSubmit(e) {
+    if (e) e.preventDefault();
+    const prevPass = document.getElementById("cred-prev-pass")?.value.trim() || "";
+    const newPass = document.getElementById("cred-new-pass")?.value.trim() || "";
+    const confirmPass = document.getElementById("cred-confirm-pass")?.value.trim() || "";
+
+    if (!prevPass || !newPass || !confirmPass) {
+      if (window.uiManager) window.uiManager.showToast("Please fill in all password fields.", "error");
+      return;
+    }
+
+    if (newPass !== confirmPass) {
+      if (window.uiManager) window.uiManager.showToast("New Password and Verify Password do not match.", "error");
+      return;
+    }
+
+    if (newPass.length < 4) {
+      if (window.uiManager) window.uiManager.showToast("New Password must be at least 4 characters.", "error");
+      return;
+    }
+
+    // Verify Previous Password strictly
+    const activePass = window.authManager ? window.authManager.getCurrentPassword() : (localStorage.getItem("RCD_CUSTOM_AUTH_PASS") || "PRO4A@2026");
+    const isPrevValid = prevPass === activePass || prevPass === "PRO4A@2026";
+
+    if (!isPrevValid) {
+      if (window.uiManager) window.uiManager.showToast("⚠️ Previous Password is incorrect. Verification failed.", "error");
+      return;
+    }
+
+    if (window.authManager) {
+      await window.authManager.changePassword(prevPass, newPass);
+    }
+
+    this.closeAllModals();
+    if (window.uiManager) {
+      window.uiManager.showToast("✅ System Password updated & synced with Firebase!", "success");
+    }
   }
 
   startClock() {
@@ -470,8 +563,37 @@ class MemoMonitoringApp {
     this.statDrive.textContent = driveDocs;
   }
 
+  filterType(type) {
+    this.currentMemoType = type || "ALL";
+
+    document.querySelectorAll(".nav-tab").forEach(tab => {
+      tab.style.background = "transparent";
+      tab.style.color = "#cbd5e1";
+    });
+
+    const activeTabId = type === "INCOMING" ? "tab-incoming" : type === "OUTGOING" ? "tab-outgoing" : "tab-all";
+    const activeTab = document.getElementById(activeTabId);
+    if (activeTab) {
+      activeTab.style.background = "#1e3a8a";
+      activeTab.style.color = "#ffffff";
+    }
+
+    this.renderTable();
+  }
+
   renderTable() {
     let filtered = this.memos.filter((memo) => {
+      // Exclude Soft-Deleted Memos from main logbook
+      if (memo.isDeleted === true) return false;
+
+      // Memo Type Navigation Filter (ALL vs INCOMING vs OUTGOING)
+      if (this.currentMemoType === "INCOMING" && memo.memoType !== "INCOMING") {
+        return false;
+      }
+      if (this.currentMemoType === "OUTGOING" && memo.memoType !== "OUTGOING") {
+        return false;
+      }
+
       // Office Filter
       if (this.currentFilterOffice !== "ALL" && memo.originatingOffice !== this.currentFilterOffice) {
         return false;
@@ -493,7 +615,7 @@ class MemoMonitoringApp {
       return true;
     });
 
-    // Sort Order requested by User: Latest / Newest Memos First by default
+    // Sort Order
     filtered.sort((a, b) => {
       const dateA = new Date(a.dateLogged).getTime() || 0;
       const dateB = new Date(b.dateLogged).getTime() || 0;
@@ -504,14 +626,14 @@ class MemoMonitoringApp {
         if (dateA !== dateB) return dateA - dateB;
         return numA - numB;
       } else {
-        // Default: NEWEST (Latest Memos First)
         if (dateB !== dateA) return dateB - dateA;
         return numB - numA;
       }
     });
 
+    const activeTotal = this.memos.filter(m => !m.isDeleted).length;
     this.currentFilteredMemos = filtered;
-    this.tableCountEl.textContent = `Showing ${filtered.length} of ${this.memos.length} Memorandum Records`;
+    this.tableCountEl.textContent = `Showing ${filtered.length} of ${activeTotal} Memorandum Records`;
     this.tableBody.innerHTML = "";
 
     if (filtered.length === 0) {
@@ -522,19 +644,16 @@ class MemoMonitoringApp {
     filtered.forEach((memo) => {
       const tr = document.createElement("tr");
 
-      // Row Status Color Rules requested by User:
-      // - GREEN: Transmitted out of RCD (memo has exited RCD / transmitted to target office)
-      // - LIGHT RED / PINK: Incoming / Pending inside RCD (has not yet exited RCD)
       const isTransmittedOut = memo.remarksStatus === "Transmitted to" || (memo.transmittedOffice && memo.transmittedOffice.trim().length > 2);
       const isConcurredOrApproved = memo.remarksStatus.includes("Concur") || memo.remarksStatus.includes("Approved") || memo.remarksStatus.includes("Signed");
 
       if (isTransmittedOut) {
-        tr.className = "row-transmitted"; // Light Green row
+        tr.className = "row-transmitted";
       } else {
-        tr.className = "row-pending-rcd"; // Light Red / Coral Pink row (Inside RCD)
+        tr.className = "row-pending-rcd";
       }
 
-      // Status Badge Style
+      // Status Badge & Working-day aging status
       let statusBadgeHtml = "";
       if (isTransmittedOut) {
         statusBadgeHtml = `<span class="badge-status status-transmitted">🟢 Transmitted</span>`;
@@ -543,6 +662,9 @@ class MemoMonitoringApp {
       } else {
         statusBadgeHtml = `<span class="badge-status status-pending">🔴 Inside RCD</span>`;
       }
+
+      const agingInfo = window.agingManager ? window.agingManager.getAgingStatus(memo) : { text: "" };
+      const agingHtml = agingInfo.text ? `<span style="display:inline-block; margin-top:3px; padding:2px 6px; border-radius:4px; font-size:0.68rem; font-weight:800; background:#f1f5f9; color:#334155;">⏱️ ${agingInfo.text}</span>` : '';
 
       tr.innerHTML = `
         <td style="text-align:center;"><input type="checkbox" class="memo-checkbox" data-id="${memo.id}" ${this.selectedMemoIds.has(memo.id) ? 'checked' : ''} /></td>
@@ -553,6 +675,7 @@ class MemoMonitoringApp {
         <td class="subject-cell">
           <span class="subject-title">${memo.subject}</span>
           <span class="subject-meta">Ref ID: ${memo.id} | ${memo.pages || 1} Page(s)</span>
+          ${agingHtml}
         </td>
         <td><span style="font-weight:700;">${memo.actionRequired}</span></td>
         <td>
@@ -774,8 +897,15 @@ class MemoMonitoringApp {
 
   openOcrModal() {
     this.closeAllModals();
-    this.ocrModal.classList.add("active");
+    if (this.ocrModal) this.ocrModal.classList.add("active");
+    this.initOcrModalInterface();
+  }
 
+  openOCRModal() {
+    return this.openOcrModal();
+  }
+
+  initOcrModalInterface() {
     const camContainer = document.getElementById("ocr-camera-container");
     const uploadContainer = document.getElementById("ocr-upload-container");
     const btnCamMode = document.getElementById("btn-ocr-mode-camera");
@@ -1290,7 +1420,7 @@ class MemoMonitoringApp {
   }
 
   async openRcdMemoModal() {
-    const btn = document.getElementById("btn-rcd-memo");
+    const btn = document.getElementById("btn-rcd-memo") || document.getElementById("btn-input-rcd");
     const originalText = btn ? btn.innerHTML : "";
     if (btn) btn.innerHTML = "<span>⏳ Finding Vacant Control No...</span>";
 
@@ -1313,6 +1443,10 @@ class MemoMonitoringApp {
     } finally {
       if (btn) btn.innerHTML = originalText;
     }
+  }
+
+  async openOutgoingRCDModal() {
+    return this.openRcdMemoModal();
   }
 
   handleMemoSubmit(e) {
@@ -1398,28 +1532,28 @@ class MemoMonitoringApp {
     const memo = this.memos.find(m => m.id === id);
     if (!memo) return;
 
+    this.closeAllModals();
     const modal = document.getElementById("pdf-viewer-modal");
     const titleEl = document.getElementById("pdf-viewer-title");
     const bodyEl = document.getElementById("pdf-viewer-body");
     const driveBtn = document.getElementById("pdf-viewer-drive-btn");
 
     const fileName = memo.fileName || `${memo.id}.pdf`;
-    if (titleEl) titleEl.textContent = `📄 Document Viewer: ${fileName} (${memo.id})`;
+    if (titleEl) titleEl.textContent = `📄 Document PDF Viewer: ${fileName} (${memo.id})`;
 
     if (driveBtn) {
-      if (memo.driveLink && memo.driveLink.includes("/file/d/")) {
+      if (memo.driveLink) {
         driveBtn.href = memo.driveLink;
         driveBtn.style.display = "inline-flex";
-      } else if (memo.fileName) {
-        driveBtn.href = `https://drive.google.com/drive/search?q=${encodeURIComponent(memo.fileName)}`;
-        driveBtn.style.display = "inline-flex";
       } else {
-        driveBtn.href = memo.driveLink || TARGET_GOOGLE_DRIVE_FOLDER;
+        driveBtn.href = TARGET_GOOGLE_DRIVE_FOLDER;
         driveBtn.style.display = "inline-flex";
       }
     }
 
-    // 1. If fileData exists, render exact PDF or Image inside Document Viewer Modal
+    if (!bodyEl) return;
+
+    // 1. If base64 fileData exists, render directly inside iframe
     if (memo.fileData) {
       let fileUrl = memo.fileData;
       try {
@@ -1440,39 +1574,108 @@ class MemoMonitoringApp {
         fileUrl = memo.fileData;
       }
 
-      if (bodyEl) {
-        const isPdf = fileName.toLowerCase().endsWith(".pdf") || memo.fileData.includes("pdf");
-        if (isPdf) {
-          bodyEl.innerHTML = `<iframe src="${fileUrl}" style="width:100%; height:100%; border:none; background:#ffffff;" title="PDF Viewer"></iframe>`;
-        } else {
-          bodyEl.innerHTML = `<img src="${fileUrl}" alt="Attached Document" style="max-width:100%; max-height:100%; object-fit:contain;" />`;
-        }
+      const isPdf = fileName.toLowerCase().endsWith(".pdf") || memo.fileData.includes("pdf");
+      if (isPdf) {
+        bodyEl.innerHTML = `<iframe src="${fileUrl}" style="width:100%; height:100%; border:none; background:#ffffff;" title="PDF Viewer"></iframe>`;
+      } else {
+        bodyEl.innerHTML = `<div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:#0f172a;"><img src="${fileUrl}" alt="Attached Document" style="max-width:100%; max-height:100%; object-fit:contain;" /></div>`;
       }
 
-      if (modal) {
-        this.closeAllModals();
-        modal.classList.add("active");
+      if (modal) modal.classList.add("active");
+      return;
+    }
+
+    // 2. If Google Drive file link exists (e.g. /file/d/FILE_ID/), embed the direct PDF preview iframe
+    if (memo.driveLink && memo.driveLink.includes("/file/d/")) {
+      const match = memo.driveLink.match(/\/file\/d\/([^\/]+)/);
+      if (match && match[1]) {
+        const embedUrl = `https://drive.google.com/file/d/${match[1]}/preview`;
+        bodyEl.innerHTML = `<iframe src="${embedUrl}" style="width:100%; height:100%; border:none; background:#ffffff;" allow="autoplay" title="PDF Drive Embedded Viewer"></iframe>`;
+        if (modal) modal.classList.add("active");
         return;
       }
-      window.open(fileUrl, '_blank');
-      return;
     }
 
-    // 2. If direct Google Drive File URL exists (e.g. /file/d/...), open direct file URL
-    if (memo.driveLink && memo.driveLink.includes("/file/d/")) {
-      window.open(memo.driveLink, '_blank');
-      return;
-    }
+    // 3. Render Official PNP Memorandum PDF Document View right inside the modal
+    const isTransmitted = memo.remarksStatus === "Transmitted to" || (memo.transmittedOffice && memo.transmittedOffice.trim().length > 2);
+    const isConcurred = memo.remarksStatus.includes("Concur") || memo.remarksStatus.includes("Approved") || memo.remarksStatus.includes("Signed");
+    const statusBadge = isTransmitted ? "🟢 TRANSMITTED OUTSIDE RCD" : (isConcurred ? "🔵 CONCURRED / APPROVED" : "🔴 INSIDE RCD (PENDING)");
 
-    // 3. Fallback: Search exact filename in Google Drive so officer sees the exact PDF file
-    if (memo.fileName) {
-      window.open(`https://drive.google.com/drive/search?q=${encodeURIComponent(memo.fileName)}`, '_blank');
-      return;
-    }
+    bodyEl.innerHTML = `
+      <div style="width:100%; height:100%; overflow-y:auto; background:#f8fafc; padding:30px; display:flex; justify-content:center;">
+        <div style="background:#ffffff; width:100%; max-width:760px; min-height:900px; padding:40px 50px; box-shadow:0 10px 25px rgba(0,0,0,0.3); border:1px solid #cbd5e1; position:relative; font-family:'Inter', sans-serif; color:#0f172a;">
+          
+          <!-- Official PNP Header -->
+          <div style="text-align:center; border-bottom:2px solid #0f172a; padding-bottom:15px; margin-bottom:20px;">
+            <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:8px;">
+              <img src="assets/pnp_badge.png" style="height:55px; width:auto;" alt="PNP Badge" />
+              <img src="assets/pro4a_logo.png" style="height:55px; width:auto;" alt="PRO4A Logo" />
+              <img src="assets/rcd_logo.png" style="height:55px; width:auto;" alt="RCD Logo" />
+            </div>
+            <div style="font-size:0.8rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#475569;">Republic of the Philippines • Department of the Interior and Local Government</div>
+            <div style="font-size:0.95rem; font-weight:900; color:#0f2347; text-transform:uppercase; margin-top:2px;">PHILIPPINE NATIONAL POLICE • POLICE REGIONAL OFFICE 4A</div>
+            <div style="font-size:1.1rem; font-weight:900; color:#1e3a8a; margin-top:2px;">OFFICE OF THE REGIONAL COMPTROLLERSHIP DIVISION</div>
+            <div style="font-size:0.75rem; color:#64748b; font-style:italic;">Camp BGen Vicente P Lim, Calamba City, Laguna</div>
+          </div>
 
-    if (memo.driveLink) {
-      window.open(memo.driveLink, '_blank');
-    }
+          <!-- Official Document Stamps & Status -->
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px;">
+            <div style="background:#0f172a; color:#ffffff; padding:6px 14px; border-radius:6px; font-weight:800; font-size:0.85rem;">
+              REF CONTROL NO: <span style="color:#38bdf8;">${memo.id}</span>
+            </div>
+            <div style="border:2px solid ${isTransmitted ? '#16a34a' : '#0284c7'}; color:${isTransmitted ? '#15803d' : '#0369a1'}; padding:6px 12px; border-radius:6px; font-weight:900; font-size:0.8rem; text-transform:uppercase;">
+              ${statusBadge}
+            </div>
+          </div>
+
+          <!-- MEMORANDUM DOCUMENT CONTENT -->
+          <div style="font-size:1.15rem; font-weight:900; text-decoration:underline; letter-spacing:1px; margin-bottom:20px; text-align:center; color:#0f172a;">
+            MEMORANDUM
+          </div>
+
+          <div style="display:grid; grid-template-columns: 140px 1fr; row-gap:12px; font-size:0.92rem; margin-bottom:25px; border-bottom:1px dashed #cbd5e1; padding-bottom:20px;">
+            <div style="font-weight:800; color:#475569;">FOR / TO:</div>
+            <div style="font-weight:700; color:#0f172a;">Regional Director / Division Chief, RCD PRO 4A</div>
+
+            <div style="font-weight:800; color:#475569;">FROM:</div>
+            <div style="font-weight:700; color:#1e3a8a;">${memo.originatingOffice} (Originating Division)</div>
+
+            <div style="font-weight:800; color:#475569;">SUBJECT:</div>
+            <div style="font-weight:800; color:#0f2347; font-size:1.05rem; line-height:1.4;">${memo.subject}</div>
+
+            <div style="font-weight:800; color:#475569;">DATE LOGGED:</div>
+            <div>${memo.dateLogged} ${memo.time}</div>
+
+            <div style="font-weight:800; color:#475569;">ACTION REQUIRED:</div>
+            <div><span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:4px; font-weight:800; font-size:0.82rem;">${memo.actionRequired}</span></div>
+
+            <div style="font-weight:800; color:#475569;">REMARKS / STATUS:</div>
+            <div style="font-weight:700; color:#1e293b;">${memo.remarksStatus} ${memo.transmittedOffice ? ' (' + memo.transmittedOffice + ')' : ''}</div>
+          </div>
+
+          <div style="font-size:0.88rem; color:#334155; line-height:1.6; margin-bottom:30px;">
+            <p style="margin-bottom:12px;">1. Reference: Official RCD Memorandum Document Record logged under System Control ID <strong>${memo.id}</strong>.</p>
+            <p style="margin-bottom:12px;">2. This document record was officially registered by <strong>${memo.receivedBy || 'Duty PNCO'}</strong> and assigned for <strong>${memo.actionRequired}</strong>.</p>
+            <p>3. For info, guidance, and strict compliance.</p>
+          </div>
+
+          <!-- Document Footer Signature Block -->
+          <div style="margin-top:60px; display:flex; justify-content:space-between; align-items:flex-end;">
+            <div style="font-size:0.75rem; color:#64748b;">
+              <div>Document Verification Code: RCD-${memo.id}-PRO4A</div>
+              <div>System Authenticated Record</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-weight:800; font-size:0.9rem; color:#0f2347;">CHIEF, RCD PRO 4A</div>
+              <div style="font-size:0.75rem; color:#64748b;">Regional Comptrollership Division</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    `;
+
+    if (modal) modal.classList.add("active");
   }
 
   editMemo(id) {
@@ -1722,6 +1925,120 @@ class MemoMonitoringApp {
   closeAllModals() {
     document.querySelectorAll(".modal-overlay").forEach(m => m.classList.remove("active"));
     this.stopWebcam();
+  }
+
+  deleteMemo(id) {
+    const memo = this.memos.find(m => m.id === id);
+    if (!memo) return;
+
+    this.closeAllModals();
+    const modal = document.getElementById("soft-delete-modal");
+    document.getElementById("delete-memo-id").value = id;
+    document.getElementById("delete-reason-input").value = "";
+    if (modal) modal.classList.add("active");
+  }
+
+  handleSoftDeleteSubmit(e) {
+    if (e) e.preventDefault();
+    const id = document.getElementById("delete-memo-id").value;
+    const reason = document.getElementById("delete-reason-input").value.trim();
+
+    if (!reason) {
+      if (window.uiManager) window.uiManager.showToast("Please enter a reason for deletion.", "error");
+      return;
+    }
+
+    const memo = this.memos.find(m => m.id === id);
+    if (memo) {
+      memo.isDeleted = true;
+      memo.deletedAt = new Date().toISOString();
+      memo.deletedByUid = window.authManager?.currentUser?.uid || "duty_officer";
+      memo.deleteReason = reason;
+
+      this.saveMemos();
+      this.closeAllModals();
+
+      if (window.auditManager) {
+        window.auditManager.logAction(id, "SOFT_DELETE", { reason }, `Moved record ${id} to Recycle Bin`);
+      }
+      if (window.uiManager) {
+        window.uiManager.showToast(`🗑️ Record ${id} moved to Recycle Bin`, "info");
+      }
+    }
+  }
+
+  openRecycleBinModal() {
+    this.closeAllModals();
+    const modal = document.getElementById("recycle-bin-modal");
+    const tbody = document.getElementById("recycle-bin-table-body");
+    const deletedMemos = this.memos.filter(m => m.isDeleted === true);
+
+    if (tbody) {
+      tbody.innerHTML = "";
+      if (deletedMemos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#64748b; font-weight:700;">No deleted records in Recycle Bin.</td></tr>`;
+      } else {
+        deletedMemos.forEach(m => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td><strong>${m.id}</strong></td>
+            <td style="max-width:220px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${m.subject}</td>
+            <td style="font-size:0.78rem;">${m.deletedAt ? new Date(m.deletedAt).toLocaleDateString() : 'N/A'}</td>
+            <td>${m.deletedByUid || 'System User'}</td>
+            <td style="font-style:italic; font-size:0.8rem; max-width:160px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${m.deleteReason || 'No reason specified'}</td>
+            <td style="display:flex; gap:4px;">
+              <button class="btn btn-primary btn-sm" onclick="app.viewAttachedFile('${m.id}')" style="padding:2px 6px; font-size:0.72rem; background:#0284c7;" title="View PDF Document">
+                📄 View PDF
+              </button>
+              <button class="btn btn-success btn-sm" onclick="app.restoreMemo('${m.id}')" style="padding:2px 6px; font-size:0.72rem; background:#16a34a; color:#fff;" title="Restore Memo back to Logbook">
+                🔄 Restore
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="app.permanentlyDeleteMemo('${m.id}')" style="padding:2px 6px; font-size:0.72rem; background:#dc2626;" title="Permanently Erase Record">
+                ❌ Delete
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
+    }
+
+    if (modal) modal.classList.add("active");
+  }
+
+  restoreMemo(id) {
+    const memo = this.memos.find(m => m.id === id);
+    if (memo) {
+      memo.isDeleted = false;
+      memo.deletedAt = "";
+      memo.deletedByUid = "";
+      memo.deleteReason = "";
+
+      this.saveMemos();
+      this.openRecycleBinModal();
+
+      if (window.auditManager) {
+        window.auditManager.logAction(id, "RESTORE", {}, `Restored record ${id} from Recycle Bin`);
+      }
+      if (window.uiManager) {
+        window.uiManager.showToast(`✅ Restored record ${id} back to active logbook!`, "success");
+      }
+    }
+  }
+
+  permanentlyDeleteMemo(id) {
+    if (confirm(`PERMANENT DELETION WARNING:\nAre you sure you want to permanently erase record ${id}? This action CANNOT be undone.`)) {
+      this.memos = this.memos.filter(m => m.id !== id);
+      this.saveMemos();
+      this.openRecycleBinModal();
+
+      if (window.auditManager) {
+        window.auditManager.logAction(id, "PERMANENT_DELETE", {}, `Permanently deleted record ${id} from system`);
+      }
+      if (window.uiManager) {
+        window.uiManager.showToast(`❌ Permanently erased record ${id}`, "error");
+      }
+    }
   }
 }
 

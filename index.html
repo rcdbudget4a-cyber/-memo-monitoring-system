@@ -46,16 +46,17 @@
         <div style="font-size: 0.95rem; font-weight: 700; color: #e2e8f0; letter-spacing: 1px; margin-top:2px;">
           MONITORING OF INCOMING/OUTGOING MEMO
         </div>
-      </div>
-
-      <div class="header-actions">
+      </div>      <div class="header-actions">
         <div id="auth-user-badge" style="display:none; align-items:center; gap:10px; background:rgba(255,255,255,0.12); padding:4px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.25);">
           <div style="display:flex; flex-direction:column; text-align:right;">
             <span id="auth-user-name" style="font-size:0.82rem; font-weight:800; color:#ffffff;">Officer Name</span>
             <span id="auth-user-role" style="font-size:0.68rem; font-weight:800; color:#f59e0b; text-transform:uppercase;">RECORDS_ADMIN</span>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="window.authManager.logout()" style="padding:4px 8px; font-size:0.75rem; color:#fca5a5; border-color:#fca5a5;" title="Sign Out of System">
-            <span>🚪 Logout</span>
+          <button class="btn btn-outline btn-sm" onclick="if(window.app){ window.app.openChangeCredentialsModal(); }" style="padding:4px 10px; font-size:0.75rem; color:#60a5fa; border-color:#60a5fa; font-weight:700;" title="Change Officer Password">
+            <span>🔐 Change Password</span>
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="window.authManager.logout()" style="padding:4px 10px; font-size:0.75rem; color:#fca5a5; border-color:#fca5a5; font-weight:700;" title="Lock System Immediately">
+            <span>🔒 Lock System</span>
           </button>
         </div>
         <div class="time-badge" id="live-clock">
@@ -74,7 +75,7 @@
         <div class="stat-icon">📑</div>
         <div class="stat-info">
           <div class="stat-value" id="stat-total">0</div>
-          <div class="stat-label">Total Memos Logged</div>
+          <div class="stat-label">TOTAL MEMOS LOGGED</div>
         </div>
       </div>
 
@@ -82,7 +83,7 @@
         <div class="stat-icon">📥</div>
         <div class="stat-info">
           <div class="stat-value" id="stat-pending-rcd">0</div>
-          <div class="stat-label">Inside RCD (Pending)</div>
+          <div class="stat-label">INSIDE RCD (PENDING)</div>
         </div>
       </div>
 
@@ -90,7 +91,7 @@
         <div class="stat-icon">📤</div>
         <div class="stat-info">
           <div class="stat-value" id="stat-transmitted">0</div>
-          <div class="stat-label">Transmitted / Released</div>
+          <div class="stat-label">TRANSMITTED / RELEASED</div>
         </div>
       </div>
 
@@ -98,7 +99,7 @@
         <div class="stat-icon">✅</div>
         <div class="stat-info">
           <div class="stat-value" id="stat-concurred">0</div>
-          <div class="stat-label">Concurred / Approved</div>
+          <div class="stat-label">CONCURRED / APPROVED</div>
         </div>
       </div>
 
@@ -106,14 +107,14 @@
         <div class="stat-icon">☁️</div>
         <div class="stat-info">
           <div class="stat-value" id="stat-drive">0</div>
-          <div class="stat-label">Google Drive Scans ↗</div>
+          <div class="stat-label">GOOGLE DRIVE SCANS ↗</div>
         </div>
       </div>
     </section>
 
     <!-- Toolbar & Search Controls -->
     <section class="toolbar-card">
-      <div class="toolbar-left">
+      <div class="toolbar-left" style="width: 100%; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
         <div class="search-box">
           <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input type="text" id="search-input" placeholder="Search Subject, Control No., Officer..." />
@@ -125,66 +126,74 @@
           <option value="RLRDD">RLRDD</option>
           <option value="RPO">RPO</option>
           <option value="RHSU">RHSU</option>
+          <option value="RID">RID</option>
+          <option value="ROD">ROD</option>
           <option value="RCD">RCD</option>
           <option value="RPRMD">RPRMD</option>
-          <option value="RESPO">RESPO</option>
-          <option value="DRDA">DRDA</option>
-          <option value="HEAD BAC">HEAD BAC</option>
+          <option value="RCADD">RCADD</option>
+          <option value="RIDMD">RIDMD</option>
         </select>
 
         <select id="status-filter" class="filter-select">
           <option value="ALL">All Remarks / Status</option>
-          <option value="TRANSMITTED">Transmitted to (Released)</option>
-          <option value="CONCURRED">Concurred / Approved</option>
+          <option value="PENDING_RCD">🔴 Light Red: Inside RCD (Pending Release)</option>
+          <option value="TRANSMITTED">🟢 Light Green: Transmitted (Released Out of RCD)</option>
+          <option value="CONCURRED">🔵 Blue Badge: Concurred / Approved</option>
         </select>
 
-        <select id="sort-order" class="filter-select" style="font-weight: 700; color: #0b1d3a; background: #eff6ff; border-color: #93c5fd;" title="Sort logbook records">
+        <select id="sort-filter" class="filter-select" style="font-weight: 700; color: #1e3a8a; background: #eff6ff; border-color: #93c5fd;">
           <option value="NEWEST">⚡ Sort: Latest Memos First</option>
           <option value="OLDEST">⏳ Sort: Oldest Memos First</option>
         </select>
       </div>
 
-      <div class="toolbar-right">
-        <button class="btn btn-ocr" id="btn-ocr-scan" title="Scan Front Page using AI OCR">
-          <span>📷 Scan Front Page (OCR)</span>
+      <div class="toolbar-right" style="margin-top: 14px; width: 100%; display: flex; flex-wrap: wrap; gap: 10px;">
+        <button class="btn btn-ocr" id="btn-scan-ocr" onclick="if(window.app){ window.app.openOCRModal(); }">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+          <span>Scan Front Page (OCR)</span>
         </button>
 
-        <button class="btn btn-rcd" id="btn-rcd-memo" title="Input Outgoing RCD Memo connected to RCD Control Google Sheet">
-          <span>📤 Input RCD Memo</span>
+        <button class="btn btn-rcd" id="btn-input-rcd" onclick="if(window.app){ window.app.openOutgoingRCDModal(); }">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          <span>📥 Input RCD Memo</span>
         </button>
 
-        <button class="btn btn-primary" id="btn-new-memo">
-          <span>📥 Log Incoming Memo</span>
+        <button class="btn btn-primary" id="btn-add-memo" onclick="if(window.app){ window.app.openMemoModal(); }">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <span>📤 Log Incoming Memo</span>
         </button>
 
-        <button class="btn btn-excel" id="btn-export-excel" title="Export Logbook to Native Excel Spreadsheet (.xlsx)">
-          <span>📈 Export to Excel (.xlsx)</span>
+        <button class="btn btn-success" id="btn-export-excel" onclick="if(window.app){ window.app.exportToExcel(); }">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          <span>Export to Excel (.xlsx)</span>
         </button>
 
-        <button class="btn btn-journal" id="btn-print-journal" onclick="openDutyJournalDirect()" title="Generate & Print RCD (R6) Duty Journal Report">
-          <span>📋 Print Duty Journal</span>
+        <button class="btn btn-journal" id="btn-print-journal" onclick="window.openDutyJournalDirect();">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+          <span>Print Duty Journal</span>
+        </button>
+
+        <button class="btn btn-recycle" id="btn-recycle-bin" onclick="if(window.app){ window.app.openRecycleBinModal(); }">
+          <span>♻️ Recycle Bin</span>
         </button>
       </div>
     </section>
 
-    <!-- Clean Status Legend Guide Bar (Placed right below the Toolbar / Scan Front Page section) -->
-    <div class="status-legend-card">
-      <div class="legend-title">
-        <span>🎨 Status Color Guide:</span>
+    <!-- Visual Legend Bar -->
+    <div style="background:#ffffff; padding:10px 16px; border-radius:8px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; border:1px solid #cbd5e1; font-size:0.82rem; font-weight:700;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="color:#0f172a; font-weight:800;">🎨 STATUS COLOR GUIDE:</span>
       </div>
-      <div class="legend-items-container">
-        <div class="legend-badge-item badge-red-guide">
-          <span class="legend-dot dot-red"></span>
-          <span><strong>Light Red Row:</strong> Inside RCD (Incoming / Pending Release)</span>
-        </div>
-        <div class="legend-badge-item badge-green-guide">
-          <span class="legend-dot dot-green"></span>
-          <span><strong>Light Green Row:</strong> Transmitted (Released Out of RCD)</span>
-        </div>
-        <div class="legend-badge-item badge-blue-guide">
-          <span class="legend-dot dot-blue"></span>
-          <span><strong>Blue Badge:</strong> Concurred / Approved Status</span>
-        </div>
+      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <span style="background:#fef2f2; color:#991b1b; padding:4px 10px; border-radius:6px; border:1px solid #fca5a5;">
+          🔴 <strong>Light Red Row:</strong> Inside RCD (Incoming / Pending Release)
+        </span>
+        <span style="background:#f0fdf4; color:#166534; padding:4px 10px; border-radius:6px; border:1px solid #86efac;">
+          🟢 <strong>Light Green Row:</strong> Transmitted (Released Out of RCD)
+        </span>
+        <span style="background:#eff6ff; color:#1e40af; padding:4px 10px; border-radius:6px; border:1px solid #93c5fd;">
+          🔵 <strong>Blue Badge:</strong> Concurred / Approved Status
+        </span>
       </div>
     </div>
 
@@ -598,11 +607,11 @@
     </div>
   </div>
 
-  <!-- SECURITY OVERLAY MODAL: Password-Only Login Screen -->
-  <div class="modal-overlay" id="auth-login-modal" style="z-index: 9999; background: rgba(7, 16, 33, 0.95); backdrop-filter: blur(10px);">
-    <div class="modal-card" style="max-width: 420px; border-radius: 16px; border: 2px solid #38bdf8; box-shadow: 0 20px 50px rgba(0,0,0,0.8); background: linear-gradient(180deg, #0b1d3a 0%, #07152b 100%); color: white;">
-      <div style="padding: 28px 24px 16px 24px; text-align: center;">
-        <div style="display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 16px;">
+  <!-- SECURITY OVERLAY MODAL: System Lock & Security Login Screen -->
+  <div class="modal-overlay active" id="auth-login-modal" style="display: flex !important; z-index: 9999; background: rgba(7, 16, 33, 0.95); backdrop-filter: blur(10px);">
+    <div class="modal-card" style="max-width: 420px; border-radius: 16px; border: 2px solid #38bdf8; box-shadow: 0 20px 50px rgba(0,0,0,0.8); background: linear-gradient(180deg, #0b1d3a 0%, #07152b 100%); color: white; text-align: center;">
+      <div style="padding: 28px 24px 14px 24px;">
+        <div style="display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 14px;">
           <img src="assets/pnp_badge.png" style="height: 50px; width: auto;" alt="PNP Badge" />
           <img src="assets/pro4a_logo.png" style="height: 50px; width: auto;" alt="PRO4A Emblem" />
           <img src="assets/rcd_logo.png" style="height: 50px; width: 50px; border-radius: 50%; border: 2px solid #e9c46a;" alt="RCD Logo" />
@@ -614,27 +623,73 @@
         <div style="font-size: 1.15rem; font-weight: 900; color: #e9c46a; letter-spacing: 1px; margin-top: 2px; text-transform: uppercase;">
           REGIONAL COMPTROLLERSHIP DIVISION
         </div>
-        <div style="font-size: 0.85rem; font-weight: 700; color: #38bdf8; margin-top: 4px;">
-          🔐 AUTHORIZED PERSONNEL ACCESS
+        <div style="font-size: 0.85rem; font-weight: 800; color: #38bdf8; margin-top: 6px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          <span>🔒 AUTHORIZED PERSONNEL LOGIN</span>
         </div>
       </div>
 
-      <form id="auth-login-form" onsubmit="event.preventDefault(); window.authManager.login(document.getElementById('auth-pass-input').value);" style="padding: 0 24px 28px 24px;">
-        <div style="margin-bottom: 16px;">
-          <label for="auth-pass-input" style="display: block; font-size: 0.78rem; font-weight: 700; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase; text-align:center;">
-            Security Passcode
+      <form id="auth-login-form" onsubmit="event.preventDefault(); const pass=document.getElementById('auth-pass-input').value; window.authManager.login('', pass);" style="padding: 0 24px 28px 24px;">
+        <input type="hidden" id="auth-email-input" value="duty.pnco@pro4a.pnp.gov.ph" />
+
+        <div style="margin-bottom: 18px; text-align: left;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #cbd5e1; margin-bottom: 8px; text-transform: uppercase;">
+            🔑 Enter System Password:
           </label>
-          <input type="password" id="auth-pass-input" required placeholder="Enter passcode" style="width: 100%; padding: 12px 16px; font-size: 1.05rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff; text-align:center; letter-spacing:2px;" autocomplete="current-password" autofocus />
+          <input type="password" id="auth-pass-input" required placeholder="Enter password..." style="width: 100%; padding: 12px 14px; font-size: 1rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff; text-align: center; letter-spacing: 2px;" autocomplete="current-password" autofocus />
         </div>
 
-        <div id="auth-error-msg" style="display: none; padding: 8px 12px; background: rgba(220, 38, 38, 0.25); border: 1px solid #fca5a5; color: #fca5a5; border-radius: 6px; font-size: 0.82rem; font-weight: 700; text-align: center; margin-bottom: 14px;"></div>
+        <div id="auth-error-msg" style="display: none; padding: 10px 12px; background: rgba(220, 38, 38, 0.25); border: 1px solid #fca5a5; color: #fca5a5; border-radius: 8px; font-size: 0.85rem; font-weight: 800; text-align: center; margin-bottom: 16px;"></div>
 
-        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; font-size: 0.95rem; font-weight: 800; border-radius: 8px; justify-content: center; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); cursor: pointer;">
-          <span>🔓 Unlock System</span>
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 13px; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: none; font-size: 0.98rem; font-weight: 900; border-radius: 8px; justify-content: center; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4); cursor: pointer;">
+          <span>🔑 Unlock System</span>
         </button>
 
-        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 16px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
-          Authorized RCD Personnel Only
+        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 18px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
+          Authorized RCD Personnel Only • Protected Security Gate
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Change System Password Modal (Firebase Connected) -->
+  <div class="modal-overlay" id="change-credentials-modal">
+    <div class="modal-card" style="max-width: 440px; border-radius: 12px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);">
+        <div class="modal-title">
+          <span>🔐 Change System Password</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <form id="change-credentials-form">
+        <div class="modal-body" style="padding: 20px;">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 0.8rem; font-weight: 800; color: #334155; margin-bottom: 6px; text-transform: uppercase;">
+              🔑 Previous Password
+            </label>
+            <input type="password" id="cred-prev-pass" required placeholder="Enter previous password" style="width: 100%; padding: 10px 14px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 0.95rem;" autocomplete="current-password" autofocus />
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 0.8rem; font-weight: 800; color: #334155; margin-bottom: 6px; text-transform: uppercase;">
+              🔒 New Password
+            </label>
+            <input type="password" id="cred-new-pass" required placeholder="Enter new password" style="width: 100%; padding: 10px 14px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 0.95rem;" autocomplete="new-password" />
+          </div>
+
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label style="display: block; font-size: 0.8rem; font-weight: 800; color: #334155; margin-bottom: 6px; text-transform: uppercase;">
+              ✅ Verify New Password
+            </label>
+            <input type="password" id="cred-confirm-pass" required placeholder="Verify new password" style="width: 100%; padding: 10px 14px; border-radius: 8px; border: 1.5px solid #cbd5e1; font-size: 0.95rem;" autocomplete="new-password" />
+          </div>
+        </div>
+
+        <div class="modal-footer" style="padding: 14px 20px;">
+          <button type="button" class="btn btn-outline btn-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #0f2347 0%, #1e3a8a 100%); font-weight: 800;">
+            <span>💾 Save New Password</span>
+          </button>
         </div>
       </form>
     </div>
@@ -663,21 +718,93 @@
     </div>
   </div>
 
+  <!-- MODAL: Soft Delete Confirmation Modal -->
+  <div class="modal-overlay" id="soft-delete-modal">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%);">
+        <div class="modal-title">
+          <span>🗑️ Confirm Soft Delete</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <form id="soft-delete-form">
+        <div class="modal-body">
+          <p style="font-size: 0.88rem; color: #475569; margin-bottom: 14px;">
+            Are you sure you want to remove this memorandum record? The record will be moved to the <strong>Recycle Bin</strong> and can be restored by an administrator.
+          </p>
+
+          <input type="hidden" id="delete-memo-id" />
+
+          <div class="form-group">
+            <label style="color:#991b1b; font-weight:700;">Reason for Deletion (Required)</label>
+            <textarea id="delete-reason-input" rows="3" required placeholder="e.g. Duplicate entry, Cancelled transaction, Data correction..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-cancel">Cancel</button>
+          <button type="submit" class="btn btn-danger">
+            <span>🗑️ Move to Recycle Bin</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Recycle Bin Modal -->
+  <div class="modal-overlay" id="recycle-bin-modal">
+    <div class="modal-card" style="max-width: 850px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #334155 0%, #1e293b 100%);">
+        <div class="modal-title">
+          <span>♻️ Admin Recycle Bin (Deleted Records)</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding: 15px;">
+        <div class="table-responsive">
+          <table class="memo-table">
+            <thead>
+              <tr>
+                <th>Control No.</th>
+                <th>Subject</th>
+                <th>Deleted Date</th>
+                <th>Deleted By</th>
+                <th>Reason</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="recycle-bin-table-body">
+              <!-- Rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-cancel">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Firebase Cloud Database & Auth SDK (v10.8.0) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <!-- Modular Infrastructure Scripts -->
   <script src="js/config.js?v=2.0"></script>
-  <script src="js/auth.js?v=3.0"></script>
+  <script src="js/auth.js?v=2.0"></script>
   <script src="js/storage.js?v=2.0"></script>
   <script src="js/validation.js?v=2.0"></script>
   <script src="js/audit.js?v=2.0"></script>
+  <script src="js/aging.js?v=2.0"></script>
   <script src="js/ui.js?v=2.0"></script>
 
-  <!-- Full Google Sheets Dataset (1,207 Records) -->
+  <!-- Full Google Sheets Dataset (1,210 Records) -->
   <script src="js/memos_data.js?v=12.0"></script>
   <!-- Application Logic -->
-  <script src="js/app.js?v=13.0"></script>
+  <script src="js/app.js?v=12.0"></script>
 </body>
 </html>
