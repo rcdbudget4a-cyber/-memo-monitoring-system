@@ -2148,11 +2148,18 @@ class MemoMonitoringApp {
   }
 
   openExcelImportFile() {
-    const input = document.getElementById("excel-import-file-input");
-    if (input) {
-      input.value = "";
-      input.click();
+    let input = document.getElementById("excel-import-file-input");
+    if (!input) {
+      input = document.createElement("input");
+      input.type = "file";
+      input.id = "excel-import-file-input";
+      input.accept = ".xlsx,.xls,.csv";
+      input.style.display = "none";
+      document.body.appendChild(input);
     }
+    input.onchange = (e) => this.handleExcelImportFile(e);
+    input.value = "";
+    input.click();
   }
 
   async handleExcelImportFile(event) {
@@ -2176,29 +2183,46 @@ class MemoMonitoringApp {
         throw new Error("No worksheets found in uploaded file.");
       }
 
-      // Convert sheet to JSON rows
-      const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: "A", range: 1 });
-      if (!rawRows || rawRows.length === 0) {
-        throw new Error("The uploaded Excel file appears to be empty or has no data rows.");
+      // Convert sheet to Array of Arrays (100% reliable format)
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      if (!rows || rows.length <= 1) {
+        throw new Error("The uploaded Excel file has no data rows.");
       }
 
-      console.log(`Parsed ${rawRows.length} raw rows from file ${file.name}`);
+      console.log(`Parsed ${rows.length} total rows from file ${file.name}`);
 
-      const importedMemos = [];
-      rawRows.forEach((r, idx) => {
-        const memoId = String(r.B || `MEMO-2026-${String(idx + 1).padStart(3, '0')}`).trim();
-        if (!memoId || memoId === "Control Ref ID") return;
+      // Existing records map for deduplication
+      const existingMap = new Map();
+      (this.memos || []).forEach(m => {
+        if (m && m.id) {
+          existingMap.set(String(m.id).trim().toUpperCase(), m);
+        }
+      });
 
-        const dateLogged = String(r.C || "").trim();
-        const time = String(r.D || "").trim();
-        const receivedBy = String(r.E || "").trim();
-        const originatingOffice = String(r.F || "").trim();
-        const subject = String(r.G || "").trim();
-        const actionRequired = String(r.H || "For Info").trim();
-        const remarksStatus = String(r.I || "Received").trim();
-        const transmittedOffice = (r.J && r.J !== "Pending Release") ? String(r.J).trim() : "";
-        const dateReceived = String(r.K || dateLogged).trim();
-        const driveLink = String(r.M || "").trim();
+      const importedMemosMap = new Map();
+      let newCount = 0;
+      let updatedCount = 0;
+
+      rows.forEach((row, idx) => {
+        if (idx === 0) return; // Skip header row
+        if (!row || row.length === 0) return;
+
+        // Index 1 is Column B (Control Ref ID)
+        let memoId = row[1] ? String(row[1]).trim() : "";
+        if (!memoId || memoId.toLowerCase().includes("control ref id") || memoId.toLowerCase().includes("control no")) {
+          return; // Skip header or empty rows
+        }
+
+        const dateLogged = row[2] ? String(row[2]).trim() : "8/4/2026";
+        const time = row[3] ? String(row[3]).trim() : "8:00:00 AM";
+        const receivedBy = row[4] ? String(row[4]).trim() : "Duty PNCO";
+        const originatingOffice = row[5] ? String(row[5]).trim() : "ROD";
+        const subject = row[6] ? String(row[6]).trim() : "Untitled Memorandum";
+        const actionRequired = row[7] ? String(row[7]).trim() : "For Info";
+        const remarksStatus = row[8] ? String(row[8]).trim() : "Received";
+        const transmittedOffice = (row[9] && String(row[9]).trim() !== "Pending Release") ? String(row[9]).trim() : "";
+        const dateReceived = row[10] ? String(row[10]).trim() : dateLogged;
+        const driveLink = row[12] ? String(row[12]).trim() : "";
 
         let computedWorkflowStatus = "RECEIVED";
         if (remarksStatus === "Transmitted to" || (transmittedOffice && transmittedOffice.length > 2)) {
@@ -2207,53 +2231,75 @@ class MemoMonitoringApp {
           computedWorkflowStatus = "APPROVED";
         }
 
-        importedMemos.push({
+        const memoKey = memoId.toUpperCase();
+        const memoObj = {
           id: memoId,
-          dateLogged: dateLogged || "8/4/2026",
-          time: time || "8:00:00 AM",
-          receivedBy: receivedBy || "Duty PNCO",
-          originatingOffice: originatingOffice || "ROD",
-          subject: subject || "Untitled Memorandum",
-          actionRequired: actionRequired || "For Info",
-          remarksStatus: remarksStatus || "Received",
+          dateLogged: dateLogged,
+          time: time,
+          receivedBy: receivedBy,
+          originatingOffice: originatingOffice,
+          subject: subject,
+          actionRequired: actionRequired,
+          remarksStatus: remarksStatus,
           transmittedOffice: transmittedOffice,
           dateReceived: dateReceived,
           driveLink: driveLink,
           pages: 1,
-          memoType: memoId.toUpperCase().startsWith("ORCD") ? "OUTGOING" : "INCOMING",
+          memoType: memoId.startsWith("ORCD") ? "OUTGOING" : "INCOMING",
           workflowStatus: computedWorkflowStatus,
           priority: "NORMAL",
           assignedSection: "RCD",
           schemaVersion: 2,
           isDeleted: false
-        });
+        };
+
+        if (existingMap.has(memoKey)) {
+          updatedCount++;
+        } else {
+          newCount++;
+        }
+
+        importedMemosMap.set(memoKey, memoObj);
       });
 
-      if (importedMemos.length === 0) {
-        throw new Error("No valid memorandum records found in the uploaded file.");
+      const uniqueImportedMemos = Array.from(importedMemosMap.values());
+
+      if (uniqueImportedMemos.length === 0) {
+        throw new Error("No valid, non-header memorandum records found in the uploaded file.");
       }
 
-      // Sync to Cloud Firestore if connected
+      // 1. Sync to Cloud Firestore (deduplicated by Document ID)
       if (this.db) {
         if (window.uiManager) {
-          window.uiManager.showToast(`☁️ Syncing ${importedMemos.length} records to Cloud Firestore...`, "info");
+          window.uiManager.showToast(`☁️ Syncing ${uniqueImportedMemos.length} records to Cloud Firestore...`, "info");
         }
-        for (let i = 0; i < importedMemos.length; i += 400) {
-          const chunk = importedMemos.slice(i, i + 400);
+        for (let i = 0; i < uniqueImportedMemos.length; i += 400) {
+          const chunk = uniqueImportedMemos.slice(i, i + 400);
           const batch = this.db.batch();
           chunk.forEach(m => {
-            const docRef = this.db.collection("memos").doc(String(m.id));
-            batch.set(docRef, m, { merge: true });
+            const cleanMemo = window.storageManager ? window.storageManager.normalizeMemo(m) : { ...m };
+            const docRef = this.db.collection("memos").doc(String(cleanMemo.id));
+            batch.set(docRef, cleanMemo, { merge: true });
           });
           await batch.commit();
         }
       }
 
-      // Merge into local memory state
-      const memoMap = new Map();
-      this.memos.forEach(m => memoMap.set(m.id, m));
-      importedMemos.forEach(m => memoMap.set(m.id, m));
-      this.memos = Array.from(memoMap.values());
+      // 2. Merge into local memory state without duplicates
+      const mergedMap = new Map();
+      (this.memos || []).forEach(m => {
+        if (m && m.id) mergedMap.set(String(m.id).trim().toUpperCase(), m);
+      });
+      uniqueImportedMemos.forEach(m => {
+        const k = String(m.id).trim().toUpperCase();
+        if (mergedMap.has(k)) {
+          mergedMap.set(k, { ...mergedMap.get(k), ...m });
+        } else {
+          mergedMap.set(k, m);
+        }
+      });
+
+      this.memos = Array.from(mergedMap.values());
 
       if (window.storageManager) {
         window.storageManager.saveMemosLocally(this.memos);
@@ -2262,13 +2308,13 @@ class MemoMonitoringApp {
       this.renderApp();
 
       if (window.uiManager) {
-        window.uiManager.showToast(`🎉 Successfully imported & synced ${importedMemos.length} records!`, "success");
+        window.uiManager.showToast(`🎉 Imported ${uniqueImportedMemos.length} memos! (${newCount} new, ${updatedCount} updated, 0 duplicates)`, "success");
       }
 
     } catch (err) {
-      console.error("Excel import failed:", err);
+      console.error("Excel import error:", err);
       if (window.uiManager) {
-        window.uiManager.showToast(`❌ Import failed: ${err.message || "Invalid Excel format"}`, "error");
+        window.uiManager.showToast(`❌ Import error: ${err.message || "Invalid Excel file"}`, "error");
       }
     }
   }
