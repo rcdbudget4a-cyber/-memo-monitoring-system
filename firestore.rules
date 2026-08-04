@@ -16,7 +16,7 @@ service cloud.firestore {
     }
 
     function isActiveUser() {
-      return userExists() && getUserData().active == true;
+      return userExists() && (getUserData().active == true || getUserData().active == 'true');
     }
 
     function hasRole(role) {

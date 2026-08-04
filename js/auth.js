@@ -12,6 +12,11 @@ class AuthManager {
     this.onAuthChangeCallbacks = [];
   }
 
+  isProfileActive(profile) {
+    if (!profile) return false;
+    return profile.active === true || profile.active === "true" || profile.active === "TRUE";
+  }
+
   init(firebaseApp) {
     if (typeof firebase === "undefined" || !firebaseApp) return;
 
@@ -22,7 +27,7 @@ class AuthManager {
     this.auth.onAuthStateChanged(async (user) => {
       if (user) {
         const profile = await this.fetchUserProfile(user.uid);
-        if (profile && profile.active === true) {
+        if (this.isProfileActive(profile)) {
           this.currentUser = user;
           this.currentProfile = profile;
           this.updateAuthUI(true);
@@ -109,7 +114,7 @@ class AuthManager {
 
       // Check Firestore User Profile
       const profile = await this.fetchUserProfile(res.user.uid);
-      if (!profile || profile.active !== true) {
+      if (!this.isProfileActive(profile)) {
         await this.auth.signOut();
         setError("⚠️ Access Denied: Authorized user profile not found or inactive in Firestore.");
         return { success: false, error: "Missing or inactive profile" };
@@ -182,7 +187,7 @@ class AuthManager {
   }
 
   hasRole(roleOrRoles) {
-    if (!this.currentProfile || !this.currentProfile.active) return false;
+    if (!this.isProfileActive(this.currentProfile)) return false;
     const role = this.userRole;
     if (role === APP_CONFIG.ROLES.ADMIN) return true;
 
