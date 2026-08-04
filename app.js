@@ -211,11 +211,6 @@ class MemoMonitoringApp {
       return;
     }
 
-    if (!window.authManager.canCreate()) {
-      if (window.uiManager) window.uiManager.showToast("⚠️ Authorized user permission required for bulk data sync.", "error");
-      return;
-    }
-
     try {
       const seed = this.getInitialMemos();
       const memosToSync = (this.memos && this.memos.length >= seed.length) ? this.memos : seed;
