@@ -46,7 +46,12 @@
         <div style="font-size: 0.95rem; font-weight: 700; color: #e2e8f0; letter-spacing: 1px; margin-top:2px;">
           MONITORING OF INCOMING/OUTGOING MEMO
         </div>
-      </div>      <div class="header-actions">
+      </div>
+      <div class="header-actions">
+        <div id="cloud-status-badge" style="display:inline-flex; align-items:center; gap:6px; background:rgba(15, 23, 42, 0.6); padding:4px 10px; border-radius:8px; border:1px solid #334155; font-size:0.75rem; font-weight:800; color:#e2e8f0; margin-right:8px;" title="Firebase Cloud Database Status">
+          <span id="cloud-status-dot" style="height:8px; width:8px; border-radius:50%; background-color:#ef4444; display:inline-block;"></span>
+          <span id="cloud-status-text">Connecting...</span>
+        </div>
         <div id="auth-user-badge" style="display:none; align-items:center; gap:10px; background:rgba(255,255,255,0.12); padding:4px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.25);">
           <div style="display:flex; flex-direction:column; text-align:right;">
             <span id="auth-user-name" style="font-size:0.82rem; font-weight:800; color:#ffffff;">Officer Name</span>
@@ -56,7 +61,7 @@
             <span>🔐 Change Password</span>
           </button>
           <button class="btn btn-outline btn-sm" onclick="window.authManager.logout()" style="padding:4px 10px; font-size:0.75rem; color:#fca5a5; border-color:#fca5a5; font-weight:700;" title="Lock System Immediately">
-            <span>🔒 Lock System</span>
+            <span>🔒 Sign Out</span>
           </button>
         </div>
         <div class="time-badge" id="live-clock">
@@ -628,14 +633,19 @@
         </div>
       </div>
 
-      <form id="auth-login-form" onsubmit="event.preventDefault(); const pass=document.getElementById('auth-pass-input').value; window.authManager.login('', pass);" style="padding: 0 24px 28px 24px;">
-        <input type="hidden" id="auth-email-input" value="duty.pnco@pro4a.pnp.gov.ph" />
+      <form id="auth-login-form" onsubmit="event.preventDefault(); const email=document.getElementById('auth-email-input').value; const pass=document.getElementById('auth-pass-input').value; window.authManager.login(email, pass);" style="padding: 0 24px 28px 24px;">
+        <div style="margin-bottom: 14px; text-align: left;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
+            ✉️ Official Email Address:
+          </label>
+          <input type="email" id="auth-email-input" required value="duty.pnco@pro4a.pnp.gov.ph" placeholder="duty.pnco@pro4a.pnp.gov.ph" style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff; text-align: center;" autocomplete="email" />
+        </div>
 
         <div style="margin-bottom: 18px; text-align: left;">
-          <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #cbd5e1; margin-bottom: 8px; text-transform: uppercase;">
-            🔑 Enter System Password:
+          <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
+            🔑 Account Password:
           </label>
-          <input type="password" id="auth-pass-input" required placeholder="Enter password..." style="width: 100%; padding: 12px 14px; font-size: 1rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff; text-align: center; letter-spacing: 2px;" autocomplete="current-password" autofocus />
+          <input type="password" id="auth-pass-input" required placeholder="Enter password..." style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff; text-align: center;" autocomplete="current-password" autofocus />
         </div>
 
         <div id="auth-error-msg" style="display: none; padding: 10px 12px; background: rgba(220, 38, 38, 0.25); border: 1px solid #fca5a5; color: #fca5a5; border-radius: 8px; font-size: 0.85rem; font-weight: 800; text-align: center; margin-bottom: 16px;"></div>

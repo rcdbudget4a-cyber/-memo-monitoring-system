@@ -41,17 +41,178 @@ class MemoMonitoringApp {
         firebase.initializeApp(APP_CONFIG.FIREBASE);
       }
       this.db = firebase.firestore();
-      if (window.authManager) window.authManager.init(firebase.app());
+
+      if (window.authManager) {
+        window.authManager.init(firebase.app());
+        window.authManager.onAuthStateChanged((user, profile) => {
+          if (user && profile) {
+            this.listenFirebaseSync();
+          } else {
+            this.stopFirebaseSync();
+          }
+        });
+      }
+
       if (window.auditManager) window.auditManager.init(this.db);
-      this.listenFirebaseSync();
     } catch (e) {
       console.warn("Firebase Cloud Database notice:", e);
     }
   }
 
+  stopFirebaseSync() {
+    if (this.firestoreUnsubscribe) {
+      try { this.firestoreUnsubscribe(); } catch (e) {}
+      this.firestoreUnsubscribe = null;
+    }
+    this.updateCloudStatusIndicator("disconnected", "Signed Out");
+  }
+
+  listenFirebaseSync() {
+    if (!this.db || !window.authManager?.currentUser) return;
+    this.stopFirebaseSync();
+
+    try {
+      this.updateCloudStatusIndicator("connecting", "Connecting...");
+
+      this.firestoreUnsubscribe = this.db.collection("memos").onSnapshot((snapshot) => {
+        if (!snapshot) return;
+
+        const isFromCache = snapshot.metadata?.fromCache;
+        if (isFromCache) {
+          this.updateCloudStatusIndicator("offline", "Offline Mode (Cached)");
+        } else {
+          this.updateCloudStatusIndicator("connected", "Cloud Connected");
+        }
+
+        let updated = false;
+        snapshot.docChanges().forEach((change) => {
+          const remoteMemo = change.doc.data();
+          if (remoteMemo && remoteMemo.id) {
+            const memoId = String(remoteMemo.id);
+            const normalized = window.storageManager ? window.storageManager.normalizeMemo(remoteMemo) : remoteMemo;
+
+            if (change.type === "added" || change.type === "modified") {
+              const idx = this.memos.findIndex(m => String(m.id) === memoId);
+              if (idx >= 0) {
+                this.memos[idx] = { ...this.memos[idx], ...normalized };
+              } else {
+                this.memos.unshift(normalized);
+              }
+              updated = true;
+            } else if (change.type === "removed") {
+              this.memos = this.memos.filter(m => String(m.id) !== memoId);
+              updated = true;
+            }
+          }
+        });
+
+        if (updated) {
+          if (window.storageManager) window.storageManager.saveLocalMemos(this.memos);
+          this.populateOfficeFilter();
+          this.renderStats();
+          this.renderTable();
+        }
+      }, (err) => {
+        console.error("Firebase Snapshot Listener Error:", err);
+        if (err.code === "permission-denied") {
+          this.updateCloudStatusIndicator("disconnected", "Permission Denied");
+          if (window.uiManager) window.uiManager.showToast("⚠️ Firestore Permission Denied. Active user profile required.", "error");
+        } else {
+          this.updateCloudStatusIndicator("offline", "Offline Mode");
+        }
+      });
+    } catch (e) {
+      console.warn("Firebase sync notice:", e);
+      this.updateCloudStatusIndicator("disconnected", "Connection Error");
+    }
+  }
+
+  updateCloudStatusIndicator(status, label) {
+    const dot = document.getElementById("cloud-status-dot");
+    const text = document.getElementById("cloud-status-text");
+    if (!dot || !text) return;
+
+    if (status === "connected") {
+      dot.style.backgroundColor = "#22c55e";
+      text.textContent = label || "Cloud Connected";
+    } else if (status === "offline" || status === "connecting") {
+      dot.style.backgroundColor = "#eab308";
+      text.textContent = label || "Offline / Syncing";
+    } else {
+      dot.style.backgroundColor = "#ef4444";
+      text.textContent = label || "Cloud Disconnected";
+    }
+  }
+
+  async saveMemoToCloud(memo) {
+    if (!this.db || !window.authManager?.currentUser) {
+      if (window.uiManager) window.uiManager.showToast("⚠️ Cloud database disconnected. User not logged in.", "error");
+      return false;
+    }
+
+    const norm = window.storageManager ? window.storageManager.normalizeMemo(memo) : { ...memo };
+    const user = window.authManager.currentUser;
+    const profile = window.authManager.currentProfile;
+
+    norm.updatedByUid = user.uid;
+    norm.updatedByName = profile?.displayName || user.email || "Authorized User";
+    if (typeof firebase !== "undefined" && firebase.firestore?.FieldValue) {
+      norm.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+      if (!norm.createdByUid) {
+        norm.createdByUid = user.uid;
+        norm.createdByName = profile?.displayName || user.email || "Authorized User";
+        norm.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      }
+    }
+
+    if (norm.fileData && norm.fileData.length > 500000) {
+      delete norm.fileData;
+    }
+
+    try {
+      const docRef = this.db.collection("memos").doc(String(norm.id));
+      await docRef.set(norm, { merge: true });
+      if (window.uiManager) window.uiManager.showToast(`☁️ Saved "${norm.id}" to cloud!`, "success");
+      return true;
+    } catch (err) {
+      console.error("Firestore write error for memo", norm.id, err);
+      const errMsg = err.code === "permission-denied"
+        ? "Permission Denied: Missing or insufficient permissions to write record."
+        : `Not saved—cloud connection failed: ${err.message || "Unknown error"}`;
+      if (window.uiManager) window.uiManager.showToast(`⚠️ ${errMsg}`, "error");
+      return false;
+    }
+  }
+
+  async deleteMemoFromCloud(memoId) {
+    if (!this.db || !window.authManager?.currentUser) {
+      if (window.uiManager) window.uiManager.showToast("⚠️ Cloud database disconnected.", "error");
+      return false;
+    }
+
+    try {
+      const docRef = this.db.collection("memos").doc(String(memoId));
+      await docRef.delete();
+      if (window.uiManager) window.uiManager.showToast(`🗑️ Deleted "${memoId}" from cloud!`, "info");
+      return true;
+    } catch (err) {
+      console.error("Firestore delete error for memo", memoId, err);
+      const errMsg = err.code === "permission-denied"
+        ? "Permission Denied: Only administrators can delete records."
+        : `Cloud delete failed: ${err.message || "Unknown error"}`;
+      if (window.uiManager) window.uiManager.showToast(`⚠️ ${errMsg}`, "error");
+      return false;
+    }
+  }
+
   async syncAllDataToFirebase() {
-    if (!this.db) {
-      if (window.uiManager) window.uiManager.showToast("⚠️ Firebase Database is not connected.", "error");
+    if (!this.db || !window.authManager?.currentUser) {
+      if (window.uiManager) window.uiManager.showToast("⚠️ Firebase Database is not connected or user not logged in.", "error");
+      return;
+    }
+
+    if (!window.authManager.hasRole(APP_CONFIG.ROLES.ADMIN)) {
+      if (window.uiManager) window.uiManager.showToast("⚠️ Admin permission required for bulk data import.", "error");
       return;
     }
 
@@ -60,7 +221,6 @@ class MemoMonitoringApp {
       const memosToSync = (this.memos && this.memos.length >= seed.length) ? this.memos : seed;
       let count = 0;
 
-      // Firestore Batch Sync (Chunks of 400 per batch)
       for (let i = 0; i < memosToSync.length; i += 400) {
         const chunk = memosToSync.slice(i, i + 400);
         const batch = this.db.batch();
@@ -86,45 +246,12 @@ class MemoMonitoringApp {
       if (window.uiManager) window.uiManager.showToast(`✅ Synced ${count} records to Firebase!`, "success");
     } catch (err) {
       console.error("Firebase sync error:", err);
-    }
-  }
-
-  listenFirebaseSync() {
-    if (!this.db) return;
-    try {
-      // Sync Memos
-      this.db.collection("memos").onSnapshot((snapshot) => {
-        if (snapshot && !snapshot.empty) {
-          let updated = false;
-          snapshot.forEach((doc) => {
-            const remoteMemo = doc.data();
-            if (remoteMemo && remoteMemo.id) {
-              const idx = this.memos.findIndex(m => m.id === remoteMemo.id);
-              const normalized = window.storageManager ? window.storageManager.normalizeMemo(remoteMemo) : remoteMemo;
-              if (idx >= 0) {
-                this.memos[idx] = { ...this.memos[idx], ...normalized };
-              } else {
-                this.memos.unshift(normalized);
-                updated = true;
-              }
-            }
-          });
-          if (updated) {
-            this.saveMemos();
-          }
-        } else {
-          this.syncAllDataToFirebase();
-        }
-      }, (err) => {
-        console.warn("Firebase listener notice:", err);
-      });
-    } catch (e) {
-      console.warn("Firebase sync notice:", e);
+      if (window.uiManager) window.uiManager.showToast(`⚠️ Sync failed: ${err.message}`, "error");
     }
   }
 
   checkSecurityAuth() {
-    // Auth status is now securely handled by window.authManager
+    // Auth status is securely managed by window.authManager
   }
 
   getInitialMemos() {
@@ -153,19 +280,6 @@ class MemoMonitoringApp {
     if (window.storageManager) {
       window.storageManager.saveLocalMemos(this.memos);
     }
-
-    if (this.db) {
-      try {
-        const latestMemos = this.memos.slice(0, 50);
-        latestMemos.forEach(memo => {
-          const norm = window.storageManager ? window.storageManager.normalizeMemo(memo) : memo;
-          this.db.collection("memos").doc(norm.id).set(norm, { merge: true }).catch(() => {});
-        });
-      } catch (e) {
-        console.warn("Firebase Cloud Sync warning", e);
-      }
-    }
-
     this.populateOfficeFilter();
     this.renderStats();
     this.renderTable();
@@ -1449,16 +1563,16 @@ class MemoMonitoringApp {
     return this.openRcdMemoModal();
   }
 
-  handleMemoSubmit(e) {
+  async handleMemoSubmit(e) {
     e.preventDefault();
-    const id = document.getElementById("form-id").value;
-    const existingIdx = this.memos.findIndex(m => m.id === id);
+    const id = String(document.getElementById("form-id").value).trim();
+    const existingIdx = this.memos.findIndex(m => String(m.id) === id);
 
     let driveLinkValue = document.getElementById("form-drive-link").value;
     const fileDataVal = this.currentUploadedFileData ? this.currentUploadedFileData : (existingIdx >= 0 ? this.memos[existingIdx].fileData : null);
     const fileNameVal = this.currentUploadedFile ? this.currentUploadedFile.name : (existingIdx >= 0 ? this.memos[existingIdx].fileName : "");
 
-    const memoData = {
+    const rawMemoData = {
       id: id,
       dateLogged: document.getElementById("form-date").value,
       time: document.getElementById("form-time").value,
@@ -1475,10 +1589,17 @@ class MemoMonitoringApp {
       pages: parseInt(document.getElementById("form-pages").value) || 1
     };
 
+    const cleanMemo = window.storageManager ? window.storageManager.normalizeMemo(rawMemoData) : rawMemoData;
+
+    const cloudSuccess = await this.saveMemoToCloud(cleanMemo);
+    if (!cloudSuccess) {
+      return; // Do not close modal or overwrite local if write failed
+    }
+
     if (existingIdx >= 0) {
-      this.memos[existingIdx] = memoData;
+      this.memos[existingIdx] = cleanMemo;
     } else {
-      this.memos.unshift(memoData);
+      this.memos.unshift(cleanMemo);
     }
 
     this.saveMemos();
@@ -1514,9 +1635,10 @@ class MemoMonitoringApp {
           if (resp.ok) {
             const resJson = await resp.json();
             if (resJson.fileUrl) {
-              const targetMemo = this.memos.find(m => m.id === memoId);
+              const targetMemo = this.memos.find(m => String(m.id) === String(memoId));
               if (targetMemo) {
                 targetMemo.driveLink = resJson.fileUrl;
+                await this.saveMemoToCloud(targetMemo);
                 this.saveMemos();
               }
             }
@@ -1751,24 +1873,32 @@ class MemoMonitoringApp {
     }
   }
 
-  batchTransmit() {
+  async batchTransmit() {
     if (this.selectedMemoIds.size === 0) return;
     const targetOffice = prompt(`Enter Transmitted Destination Office for ${this.selectedMemoIds.size} selected memo(s):\n(e.g., "Concurred, Forwarded to RLRDD")`, "Concurred, Forwarded to ");
     if (!targetOffice) return;
 
     let count = 0;
-    this.memos.forEach(m => {
+    const user = window.authManager?.currentUser;
+    const profile = window.authManager?.currentProfile;
+
+    for (const m of this.memos) {
       if (this.selectedMemoIds.has(m.id)) {
         m.remarksStatus = "Transmitted to";
         m.transmittedOffice = targetOffice;
-        count++;
+        m.workflowStatus = "TRANSMITTED";
+        m.updatedByUid = user?.uid || "";
+        m.updatedByName = profile?.displayName || user?.email || "Duty PNCO";
+
+        const cloudSuccess = await this.saveMemoToCloud(m);
+        if (cloudSuccess) count++;
       }
-    });
+    }
 
     this.selectedMemoIds.clear();
     if (this.selectAllCheckbox) this.selectAllCheckbox.checked = false;
     this.saveMemos();
-    alert(`Successfully transmitted ${count} selected memorandum record(s) out of RCD! Rows updated to Green.`);
+    if (window.uiManager) window.uiManager.showToast(`✅ Successfully transmitted ${count} memorandum record(s)!`, "success");
   }
 
   batchExportExcel() {
@@ -1832,59 +1962,176 @@ class MemoMonitoringApp {
     reader.readAsText(file);
   }
 
-  exportToExcel() {
+  async exportToExcel() {
     if (typeof XLSX === "undefined") {
-      alert("Excel export engine is loading. Please try exporting again.");
+      if (window.uiManager) window.uiManager.showToast("⚠️ Excel engine is loading. Please try again in a moment.", "error");
       return;
     }
-    const data = this.memos.map((m, idx) => {
+
+    if (window.uiManager) window.uiManager.showToast("⏳ Fetching latest records from Cloud & preparing Excel export...", "info");
+
+    // 1. Obtain latest memo records from Firebase Firestore (or fallback to local memory state)
+    let latestMemos = [];
+    if (this.db && window.authManager?.currentUser) {
+      try {
+        const snap = await this.db.collection("memos").get();
+        if (snap && !snap.empty) {
+          snap.forEach(doc => {
+            const data = doc.data();
+            if (data && data.id) {
+              const norm = window.storageManager ? window.storageManager.normalizeMemo(data) : data;
+              latestMemos.push(norm);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn("Could not query Firestore for export, using local memory state:", err);
+      }
+    }
+
+    if (!latestMemos || latestMemos.length === 0) {
+      latestMemos = Array.isArray(this.memos) ? this.memos.map(m => window.storageManager ? window.storageManager.normalizeMemo(m) : m) : [];
+    }
+
+    // Filter out deleted memos
+    latestMemos = latestMemos.filter(m => !m.isDeleted);
+
+    // 2. Fetch template workbook from data folder
+    const templatePath = "data/PRO4A_RCD_Memo_Logbook_2026-08-04.xlsx";
+    let workbook;
+    try {
+      const resp = await fetch(templatePath);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
+      const arrayBuffer = await resp.arrayBuffer();
+      workbook = XLSX.read(arrayBuffer, { type: "array", cellStyles: true, cellFormulas: true, cellDates: true, cellNF: true });
+    } catch (fetchErr) {
+      console.warn("Could not load template workbook from data folder, generating fallback workbook:", fetchErr);
+      workbook = XLSX.utils.book_new();
+    }
+
+    // Select worksheet
+    let worksheetName = "Memo Logbook";
+    let worksheet = workbook.Sheets[worksheetName];
+    if (!worksheet) {
+      if (workbook.SheetNames && workbook.SheetNames.length > 0) {
+        worksheetName = workbook.SheetNames[0];
+        worksheet = workbook.Sheets[worksheetName];
+      } else {
+        worksheetName = "Memo Logbook";
+        worksheet = {};
+        XLSX.utils.book_append_sheet(workbook, worksheet, worksheetName);
+      }
+    }
+
+    // Ensure Row 1 Headers exist in exact 13-column order
+    const columns = ['A','B','C','D','E','F','G','H','I','J','K','L','M'];
+    const headerTitles = [
+      "No.",
+      "Control Ref ID",
+      "Date Logged",
+      "Time",
+      "Input / Received By",
+      "Originating Office",
+      "Subject / Title of Memo",
+      "Action Required",
+      "Remarks / Status",
+      "Transmitted Office",
+      "Date Received",
+      "RCD Location Status",
+      "Google Drive Link"
+    ];
+
+    columns.forEach((col, idx) => {
+      const cellKey = col + '1';
+      if (!worksheet[cellKey]) {
+        worksheet[cellKey] = { v: headerTitles[idx], t: 's' };
+      }
+    });
+
+    // Remove existing data rows (Row 2 onwards) from worksheet
+    Object.keys(worksheet).forEach(key => {
+      if (key.startsWith('!') || key.endsWith('1')) return;
+      const match = key.match(/^([A-M])(\d+)$/);
+      if (match) {
+        const rowNum = parseInt(match[2], 10);
+        if (rowNum > 1) {
+          delete worksheet[key];
+        }
+      }
+    });
+
+    // Populate data rows beginning at Row 2
+    latestMemos.forEach((m, idx) => {
+      const r = idx + 2; // Row 2, Row 3, ...
+
       const isTransmitted = m.remarksStatus === "Transmitted to" || (m.transmittedOffice && m.transmittedOffice.trim().length > 2);
-      const isConcurred = m.remarksStatus.includes("Concur") || m.remarksStatus.includes("Approved") || m.remarksStatus.includes("Signed");
-      
+      const isConcurred = m.remarksStatus && (m.remarksStatus.includes("Concur") || m.remarksStatus.includes("Approved") || m.remarksStatus.includes("Signed"));
+
       let flowStatus = isTransmitted ? "Transmitted (Out of RCD)" : "Inside RCD (Pending Release)";
       if (isConcurred) flowStatus += " | Concurred";
 
-      return {
-        "No.": idx + 1,
-        "Control Ref ID": m.id,
-        "Date Logged": m.dateLogged,
-        "Time": m.time,
-        "Input / Received By": m.receivedBy,
-        "Originating Office": m.originatingOffice,
-        "Subject / Title of Memo": m.subject,
-        "Action Required": m.actionRequired,
-        "Remarks / Status": m.remarksStatus,
-        "Transmitted Office": m.transmittedOffice || "Pending Release",
-        "Date Received": m.dateReceived || m.dateLogged,
-        "RCD Location Status": flowStatus,
-        "Google Drive Link": m.driveLink || ""
-      };
+      const rowValues = [
+        { v: idx + 1, t: 'n' },                                                     // 1. No. (numeric renumbered from 1)
+        { v: String(m.id || ''), t: 's' },                                          // 2. Control Ref ID
+        { v: String(m.dateLogged || ''), t: 's' },                                  // 3. Date Logged
+        { v: String(m.time || ''), t: 's' },                                        // 4. Time
+        { v: String(m.receivedBy || ''), t: 's' },                                  // 5. Input / Received By
+        { v: String(m.originatingOffice || ''), t: 's' },                           // 6. Originating Office
+        { v: String(m.subject || ''), t: 's' },                                     // 7. Subject / Title of Memo
+        { v: String(m.actionRequired || ''), t: 's' },                              // 8. Action Required
+        { v: String(m.remarksStatus || ''), t: 's' },                               // 9. Remarks / Status
+        { v: String(m.transmittedOffice || 'Pending Release'), t: 's' },            // 10. Transmitted Office
+        { v: String(m.dateReceived || m.dateLogged || ''), t: 's' },                // 11. Date Received
+        { v: String(flowStatus), t: 's' },                                          // 12. RCD Location Status
+        { v: String(m.driveLink || ''), t: 's' }                                    // 13. Google Drive Link
+      ];
+
+      // Add hyperlink to column M if driveLink is valid URL
+      if (m.driveLink && m.driveLink.startsWith("http")) {
+        rowValues[12].l = { Target: m.driveLink, Tooltip: "Open Google Drive File" };
+      }
+
+      columns.forEach((col, colIdx) => {
+        const cellKey = col + r;
+        worksheet[cellKey] = rowValues[colIdx];
+      });
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
+    // Update worksheet reference range !ref and !autofilter
+    const totalRows = latestMemos.length + 1;
+    const maxRow = Math.max(totalRows, 1);
+    worksheet['!ref'] = `A1:M${maxRow}`;
+    if (worksheet['!autofilter']) {
+      worksheet['!autofilter'].ref = `A1:M${maxRow}`;
+    } else {
+      worksheet['!autofilter'] = { ref: `A1:M${maxRow}` };
+    }
 
-    // Auto Column Widths
-    worksheet['!cols'] = [
-      { wch: 6 },
-      { wch: 18 },
-      { wch: 16 },
-      { wch: 14 },
-      { wch: 24 },
-      { wch: 18 },
-      { wch: 55 },
-      { wch: 18 },
-      { wch: 24 },
-      { wch: 35 },
-      { wch: 16 },
-      { wch: 30 },
-      { wch: 50 }
-    ];
+    // Preserve / set optimal column widths if missing
+    if (!worksheet['!cols']) {
+      worksheet['!cols'] = [
+        { wch: 6 },   // No.
+        { wch: 18 },  // Control Ref ID
+        { wch: 16 },  // Date Logged
+        { wch: 14 },  // Time
+        { wch: 24 },  // Input / Received By
+        { wch: 18 },  // Originating Office
+        { wch: 55 },  // Subject
+        { wch: 18 },  // Action Required
+        { wch: 24 },  // Remarks / Status
+        { wch: 35 },  // Transmitted Office
+        { wch: 16 },  // Date Received
+        { wch: 30 },  // RCD Location Status
+        { wch: 50 }   // Google Drive Link
+      ];
+    }
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Memo Logbook");
-
+    // Export completed workbook with formatted date in filename
     const todayStr = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(workbook, `PRO4A_RCD_Memo_Logbook_${todayStr}.xlsx`);
+    const fileName = `PRO4A_RCD_Memo_Logbook_${todayStr}.xlsx`;
+    XLSX.writeFile(workbook, fileName, { cellStyles: true });
+
+    if (window.uiManager) window.uiManager.showToast(`📊 Successfully exported ${latestMemos.length} records to ${fileName}`, "success");
   }
 
   exportToCSV() {
@@ -1938,7 +2185,7 @@ class MemoMonitoringApp {
     if (modal) modal.classList.add("active");
   }
 
-  handleSoftDeleteSubmit(e) {
+  async handleSoftDeleteSubmit(e) {
     if (e) e.preventDefault();
     const id = document.getElementById("delete-memo-id").value;
     const reason = document.getElementById("delete-reason-input").value.trim();
@@ -1948,21 +2195,24 @@ class MemoMonitoringApp {
       return;
     }
 
-    const memo = this.memos.find(m => m.id === id);
+    const memo = this.memos.find(m => String(m.id) === String(id));
     if (memo) {
       memo.isDeleted = true;
       memo.deletedAt = new Date().toISOString();
       memo.deletedByUid = window.authManager?.currentUser?.uid || "duty_officer";
       memo.deleteReason = reason;
 
-      this.saveMemos();
-      this.closeAllModals();
+      const cloudSuccess = await this.saveMemoToCloud(memo);
+      if (cloudSuccess) {
+        this.saveMemos();
+        this.closeAllModals();
 
-      if (window.auditManager) {
-        window.auditManager.logAction(id, "SOFT_DELETE", { reason }, `Moved record ${id} to Recycle Bin`);
-      }
-      if (window.uiManager) {
-        window.uiManager.showToast(`🗑️ Record ${id} moved to Recycle Bin`, "info");
+        if (window.auditManager) {
+          window.auditManager.logAction(id, "SOFT_DELETE", { reason }, `Moved record ${id} to Recycle Bin`);
+        }
+        if (window.uiManager) {
+          window.uiManager.showToast(`🗑️ Record ${id} moved to Recycle Bin`, "info");
+        }
       }
     }
   }
@@ -2006,37 +2256,47 @@ class MemoMonitoringApp {
     if (modal) modal.classList.add("active");
   }
 
-  restoreMemo(id) {
-    const memo = this.memos.find(m => m.id === id);
+  async restoreMemo(id) {
+    const memo = this.memos.find(m => String(m.id) === String(id));
     if (memo) {
       memo.isDeleted = false;
       memo.deletedAt = "";
       memo.deletedByUid = "";
       memo.deleteReason = "";
 
-      this.saveMemos();
-      this.openRecycleBinModal();
+      const cloudSuccess = await this.saveMemoToCloud(memo);
+      if (cloudSuccess) {
+        this.saveMemos();
+        this.openRecycleBinModal();
 
-      if (window.auditManager) {
-        window.auditManager.logAction(id, "RESTORE", {}, `Restored record ${id} from Recycle Bin`);
-      }
-      if (window.uiManager) {
-        window.uiManager.showToast(`✅ Restored record ${id} back to active logbook!`, "success");
+        if (window.auditManager) {
+          window.auditManager.logAction(id, "RESTORE", {}, `Restored record ${id} from Recycle Bin`);
+        }
+        if (window.uiManager) {
+          window.uiManager.showToast(`✅ Restored record ${id} back to active logbook!`, "success");
+        }
       }
     }
   }
 
-  permanentlyDeleteMemo(id) {
+  async permanentlyDeleteMemo(id) {
+    if (!window.authManager?.canDelete()) {
+      alert("Permission Denied: Only administrators can permanently delete records.");
+      return;
+    }
     if (confirm(`PERMANENT DELETION WARNING:\nAre you sure you want to permanently erase record ${id}? This action CANNOT be undone.`)) {
-      this.memos = this.memos.filter(m => m.id !== id);
-      this.saveMemos();
-      this.openRecycleBinModal();
+      const cloudSuccess = await this.deleteMemoFromCloud(id);
+      if (cloudSuccess) {
+        this.memos = this.memos.filter(m => String(m.id) !== String(id));
+        this.saveMemos();
+        this.openRecycleBinModal();
 
-      if (window.auditManager) {
-        window.auditManager.logAction(id, "PERMANENT_DELETE", {}, `Permanently deleted record ${id} from system`);
-      }
-      if (window.uiManager) {
-        window.uiManager.showToast(`❌ Permanently erased record ${id}`, "error");
+        if (window.auditManager) {
+          window.auditManager.logAction(id, "PERMANENT_DELETE", {}, `Permanently deleted record ${id} from system`);
+        }
+        if (window.uiManager) {
+          window.uiManager.showToast(`❌ Permanently erased record ${id}`, "error");
+        }
       }
     }
   }

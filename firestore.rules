@@ -7,12 +7,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userExists() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function isActiveUser() {
-      return isAuthenticated() && getUserData().active == true;
+      return userExists() && getUserData().active == true;
     }
 
     function hasRole(role) {
@@ -56,7 +60,7 @@ service cloud.firestore {
 
     // Security Settings
     match /settings/{settingId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveUser();
       allow write: if hasRole('admin');
     }
   }

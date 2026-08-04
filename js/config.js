@@ -39,11 +39,9 @@ const APP_CONFIG = {
     HEALTH_ENDPOINT: "/api/health"
   },
 
-  // Default Officer Credentials & Passcodes
+  // Default Officer Login Email Hint
   DEFAULT_AUTH: {
-    DEFAULT_EMAIL: "duty.pnco@pro4a.pnp.gov.ph",
-    DEFAULT_PASSWORD: "RCD@2026",
-    VALID_PASSCODES: ["RCD@2026", "PRO4A@2026"]
+    DEFAULT_EMAIL: "duty.pnco@pro4a.pnp.gov.ph"
   },
 
   // Supported User Roles & Permissions

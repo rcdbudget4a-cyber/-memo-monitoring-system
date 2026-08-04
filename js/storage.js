@@ -65,7 +65,7 @@ class StorageManager {
 
     return {
       // Existing Legacy Fields
-      id: memo.id || `MEMO-${Date.now()}`,
+      id: String(memo.id || `MEMO-${Date.now()}`),
       dateLogged: memo.dateLogged || new Date().toLocaleDateString("en-US"),
       time: memo.time || new Date().toLocaleTimeString("en-US"),
       receivedBy: memo.receivedBy || "Duty PNCO",
