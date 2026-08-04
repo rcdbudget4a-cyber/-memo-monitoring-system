@@ -2496,6 +2496,27 @@ function initApp() {
   }
 }
 
+window.openExcelImportFile = function() {
+  if (!window.app) initApp();
+  let input = document.getElementById("excel-import-file-input");
+  if (!input) {
+    input = document.createElement("input");
+    input.type = "file";
+    input.id = "excel-import-file-input";
+    input.accept = ".xlsx,.xls,.csv";
+    input.style.display = "none";
+    document.body.appendChild(input);
+  }
+  input.onchange = function(e) {
+    if (!window.app) initApp();
+    if (window.app) {
+      window.app.handleExcelImportFile(e);
+    }
+  };
+  input.value = "";
+  input.click();
+};
+
 window.openDutyJournalDirect = function() {
   if (!window.app) initApp();
   const modal = document.getElementById("journal-modal");
