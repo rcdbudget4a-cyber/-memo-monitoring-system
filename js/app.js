@@ -117,7 +117,31 @@ class MemoMonitoringApp {
     this.stopFirebaseSync();
     this.updateCloudStatusIndicator("connecting", "Firebase syncing");
     this.firebaseUnsubscribe = this.db.collection("memos").onSnapshot((snapshot) => {
-      const cloudMemos = snapshot.docs.map(doc => window.storageManager ? window.storageManager.normalizeMemo(doc.data()) : doc.data());
+      const localMap = new Map();
+      if (Array.isArray(this.memos)) {
+        this.memos.forEach(m => {
+          if (m && m.id) localMap.set(String(m.id).trim().toUpperCase(), m);
+        });
+      }
+
+      const cloudMemos = snapshot.docs.map(doc => {
+        const normalized = window.storageManager
+          ? window.storageManager.normalizeMemo(doc.data())
+          : doc.data();
+
+        const local = normalized?.id
+          ? localMap.get(String(normalized.id).trim().toUpperCase())
+          : null;
+
+        // Preserve an old local-only attachment for the current workstation,
+        // but never require Firestore to carry the Base64 bytes.
+        if (local?.fileData && !normalized.fileData) {
+          normalized.fileData = local.fileData;
+        }
+
+        return normalized;
+      });
+
       this.memos = cloudMemos;
       if (window.storageManager) window.storageManager.saveLocalMemos(this.memos);
       this.renderApp();
@@ -153,7 +177,13 @@ class MemoMonitoringApp {
 
     if (this.db && window.authManager?.currentUser) {
       try {
-        await this.db.collection("memos").doc(String(norm.id)).set(norm, { merge: true });
+        // Firestore has a ~1 MiB document limit.
+        // Never write Base64 PDF/JPG/PNG bytes into the memo document.
+        const cloudMemo = { ...norm };
+        // Explicitly remove any legacy Base64 attachment field already stored in Firestore.
+        cloudMemo.fileData = firebase.firestore.FieldValue.delete();
+
+        await this.db.collection("memos").doc(String(norm.id)).set(cloudMemo, { merge: true });
         if (window.uiManager) window.uiManager.showToast(`☁️ Saved "${norm.id}" to Firebase.`, "success");
         return true;
       } catch (err) {
@@ -233,6 +263,10 @@ class MemoMonitoringApp {
             Object.keys(cleanMemo).forEach(key => {
               if (cleanMemo[key] === undefined) cleanMemo[key] = "";
             });
+
+            // Explicitly remove legacy attachment Base64 bytes from Firestore.
+            cleanMemo.fileData = firebase.firestore.FieldValue.delete();
+
             const docRef = this.db.collection("memos").doc(String(cleanMemo.id));
             batch.set(docRef, cleanMemo, { merge: true });
             count++;
@@ -1639,14 +1673,115 @@ class MemoMonitoringApp {
     return this.openRcdMemoModal();
   }
 
+  async uploadAttachmentToGoogleDrive(file, dataUrl, memoId) {
+    if (!file || !dataUrl) return null;
+
+    const parts = String(dataUrl).split(",");
+    if (parts.length < 2) {
+      throw new Error("Invalid attachment data.");
+    }
+
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    const mimeType = mimeMatch ? mimeMatch[1] : (file.type || "application/pdf");
+    const base64Data = parts.slice(1).join(",");
+
+    const response = await fetch("/api/drive-upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: `${memoId}_${file.name}`,
+        mimeType: mimeType,
+        fileData: base64Data
+      })
+    });
+
+    let result = null;
+    try {
+      result = await response.json();
+    } catch (_) {}
+
+    if (!response.ok || !result?.ok || !result?.fileUrl) {
+      throw new Error(
+        result?.error || `Google Drive upload failed (HTTP ${response.status}).`
+      );
+    }
+
+    return result;
+  }
+
   async handleMemoSubmit(e) {
     e.preventDefault();
     const id = String(document.getElementById("form-id").value).trim();
     const existingIdx = this.memos.findIndex(m => String(m.id) === id);
 
     let driveLinkValue = document.getElementById("form-drive-link").value;
-    const fileDataVal = this.currentUploadedFileData ? this.currentUploadedFileData : (existingIdx >= 0 ? this.memos[existingIdx].fileData : null);
-    const fileNameVal = this.currentUploadedFile ? this.currentUploadedFile.name : (existingIdx >= 0 ? this.memos[existingIdx].fileName : "");
+    const fileDataVal = this.currentUploadedFileData
+      ? this.currentUploadedFileData
+      : (existingIdx >= 0 ? this.memos[existingIdx].fileData : null);
+
+    const fileNameVal = this.currentUploadedFile
+      ? this.currentUploadedFile.name
+      : (existingIdx >= 0 ? this.memos[existingIdx].fileName : "");
+
+    // If a new scan was selected, upload it to Google Drive BEFORE Firestore.
+    // This ensures Firestore stores only the returned Drive URL + memo metadata.
+    if (this.currentUploadedFile && this.currentUploadedFileData) {
+      const saveBtn = document.querySelector('#memo-form button[type="submit"]');
+      const originalLabel = saveBtn ? saveBtn.innerHTML : "";
+
+      try {
+        if (saveBtn) {
+          saveBtn.disabled = true;
+          saveBtn.innerHTML = "☁️ Uploading scan to Google Drive...";
+        }
+
+        if (window.uiManager) {
+          window.uiManager.showToast(
+            "☁️ Uploading scanned document to Google Drive...",
+            "info"
+          );
+        }
+
+        const uploaded = await this.uploadAttachmentToGoogleDrive(
+          this.currentUploadedFile,
+          this.currentUploadedFileData,
+          id
+        );
+
+        driveLinkValue = uploaded.fileUrl;
+
+        const driveInput = document.getElementById("form-drive-link");
+        if (driveInput) driveInput.value = driveLinkValue;
+
+        if (window.uiManager) {
+          window.uiManager.showToast(
+            "✅ Scan uploaded to Google Drive.",
+            "success"
+          );
+        }
+      } catch (uploadErr) {
+        console.error("Google Drive attachment upload error:", uploadErr);
+
+        if (window.uiManager) {
+          window.uiManager.showToast(
+            `⚠️ Scan upload failed: ${uploadErr.message}`,
+            "error"
+          );
+        }
+
+        alert(
+          "The memorandum was NOT saved because the scanned attachment " +
+          "could not be uploaded to Google Drive.\n\n" +
+          uploadErr.message
+        );
+        return;
+      } finally {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = originalLabel;
+        }
+      }
+    }
 
     const rawMemoData = {
       id: id,
@@ -1661,7 +1796,9 @@ class MemoMonitoringApp {
       dateReceived: document.getElementById("form-date-received").value,
       driveLink: driveLinkValue,
       fileName: fileNameVal,
-      fileData: fileDataVal,
+      // A successful Drive upload makes the Base64 copy unnecessary.
+      // Retain an old local-only attachment only when no Drive file URL exists.
+      fileData: driveLinkValue && !driveLinkValue.includes("/folders/") ? "" : fileDataVal,
       pages: parseInt(document.getElementById("form-pages").value) || 1
     };
 
@@ -1712,27 +1849,7 @@ class MemoMonitoringApp {
             });
           }
 
-          // 2. Upload PDF / JPG / PNG File to Google Drive Folder
-          if (this.currentUploadedFileData) {
-            const uploadData = this.currentUploadedFileData;
-            const parts = uploadData.split(',');
-            const mimeMatch = parts[0].match(/:(.*?);/);
-            const mime = mimeMatch ? mimeMatch[1] : "application/pdf";
-            const base64Data = parts[1];
-
-            const drivePayload = {
-              filename: `${id}_${fileNameVal}`,
-              mimeType: mime,
-              fileData: base64Data
-            };
-
-            fetch(scriptUrl, {
-              method: "POST",
-              mode: "no-cors",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(drivePayload)
-            });
-          }
+          // Attachment upload was already completed before Firestore save.
         } catch (err) {
           console.warn("Background Google sync notice:", err);
         }
