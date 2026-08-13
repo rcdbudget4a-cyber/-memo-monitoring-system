@@ -17,21 +17,22 @@ const APP_CONFIG = {
   SCHEMA_VERSION: 2,
 
   // Firebase Web App Configuration
+  // Fill the values from Firebase Console > Project settings > Your apps > Web app.
+  // The target project for this cloud deployment is: rcd-system
   FIREBASE: {
-    apiKey: "AIzaSyC04xaukwxDG9-Hn8B1vwZVuaQrvb9zH1k",
-    authDomain: "incoming-outgoing-memo.firebaseapp.com",
-    projectId: "incoming-outgoing-memo",
-    storageBucket: "incoming-outgoing-memo.firebasestorage.app",
-    messagingSenderId: "985454161101",
-    appId: "1:985454161101:web:95da4973e0cc72b574cd84",
-    measurementId: "G-34W97S6RBW"
+    apiKey: "REPLACE_WITH_RCD_SYSTEM_API_KEY",
+    authDomain: "rcd-system.firebaseapp.com",
+    projectId: "rcd-system",
+    storageBucket: "REPLACE_WITH_RCD_SYSTEM_STORAGE_BUCKET",
+    messagingSenderId: "REPLACE_WITH_RCD_SYSTEM_MESSAGING_SENDER_ID",
+    appId: "REPLACE_WITH_RCD_SYSTEM_APP_ID"
   },
 
   // Google Integration Endpoints
   GOOGLE_DRIVE_FOLDER: "https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing",
-  GOOGLE_SHEET_RCD_CONTROL: "https://docs.google.com/spreadsheets/d/166VH0J3B0kY9MBvP37x9NtV32Vsk_y0kDqfQrutRcxA/edit?gid=767216694#gid=767216694",
-  GOOGLE_SHEET_RCD_CSV: "https://docs.google.com/spreadsheets/d/166VH0J3B0kY9MBvP37x9NtV32Vsk_y0kDqfQrutRcxA/gviz/tq?tqx=out:csv&gid=767216694",
-  GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxvhr0U3IWOhOLYLdWZFSRL-Q8otNf4gTPSkBgsD82CrNPJ9xowvuMsUgFLSNAsvAPIUg/exec",
+  GOOGLE_SHEET_RCD_CONTROL: "https://docs.google.com/spreadsheets/d/18GuL5EwafykdUrTBmQKBdQfMIv1BDtios5K-xHjTG1k/edit?gid=2125212604#gid=2125212604",
+  GOOGLE_SHEET_RCD_CSV: "https://docs.google.com/spreadsheets/d/18GuL5EwafykdUrTBmQKBdQfMIv1BDtios5K-xHjTG1k/gviz/tq?tqx=out:csv&gid=2125212604",
+  GOOGLE_APPS_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbxpRqR02DdjkHG07lSxfofyjXsvO-rnfYAv_InZl5GvmcqWzwmgW-F-lVVWP5ZNzh-J8g/exec",
 
   // Cloudflare Pages & Worker Integration
   CLOUDFLARE: {
@@ -39,9 +40,10 @@ const APP_CONFIG = {
     HEALTH_ENDPOINT: "/api/health"
   },
 
-  // Default Officer Login Email Hint
+  // Default Officer & Admin Credentials
   DEFAULT_AUTH: {
-    DEFAULT_EMAIL: "duty.pnco@pro4a.pnp.gov.ph"
+    DEFAULT_EMAIL: "duty.pnco@pro4a.pnp.gov.ph",
+    ADMIN_EMAIL: "admin@pro4a.pnp.gov.ph"
   },
 
   // Supported User Roles & Permissions

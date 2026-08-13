@@ -1,0 +1,52 @@
+RCD MEMO MONITORING SYSTEM - AUTO-IP WINDOWS INSTALLATION
+
+The installer automatically detects the active LAN IPv4 address of the server
+computer. It saves that address in the client installer it creates.
+
+SERVER COMPUTER (perform once)
+1. Connect the server computer to the office network. Use a Private Windows
+   network profile.
+2. Install the current Node.js LTS version from https://nodejs.org/en/download.
+3. Extract this ZIP to a permanent folder.
+4. Right-click INSTALL_SERVER.bat and choose Run as administrator.
+5. Keep the server computer powered on while office users need the system.
+
+CLIENT COMPUTERS
+1. Confirm that the computer is connected to the same office LAN.
+2. Extract this ZIP or copy the Client Installer folder.
+3. Double-click INSTALL_CLIENT.bat.
+4. Open the new RCD Memo Monitoring System shortcut with the ORCD MEMO icon
+   on the Desktop.
+
+NETWORK TEST
+After installation, use the server address displayed by INSTALL_SERVER.bat.
+Open SERVER-ADDRESS/api/health in a client browser. A response containing
+"status":"online" means the network connection is working.
+
+DATA AND BACKUP
+The shared database is stored on the server computer at:
+C:\ProgramData\RCD Memo Monitoring System\data\memos_db.json
+Back up the data folder regularly. Re-running the server installer automatically
+preserves and restores the database already installed on the server.
+
+TROUBLESHOOTING
+- If the page does not open, verify that the server computer still uses
+  the same IP detected during installation and that both computers are on the
+  same network.
+- Confirm the Windows network profile is Private.
+- Restart the task named "RCD Memo Monitoring Server" in Task Scheduler.
+- Review server.log inside C:\ProgramData\RCD Memo Monitoring System.
+
+SERVER ON/OFF CONTROLS
+----------------------
+Run these files on the SERVER computer only:
+
+DISABLE.bat
+  Stops the RCD Memo Monitoring Server and disables automatic startup.
+  All connected client computers will lose access while it is disabled.
+
+ENABLE.bat
+  Enables automatic startup, starts the server, checks the local connection,
+  and opens the system when startup succeeds.
+
+Right-click either file and select "Run as administrator."

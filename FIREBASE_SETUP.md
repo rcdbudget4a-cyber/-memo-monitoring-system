@@ -4,15 +4,15 @@
 ---
 
 ## 1. Firebase Project Overview
-- **Project ID**: `incoming-outgoing-memo`
-- **Auth Domain**: `incoming-outgoing-memo.firebaseapp.com`
+- **Project ID**: `rcd-system`
+- **Auth Domain**: `rcd-system.firebaseapp.com`
 - **Firestore Database**: Production Mode
 
 ---
 
 ## 2. Authentication Configuration
 
-1. Go to [Firebase Console](https://console.firebase.google.com/) -> Select **incoming-outgoing-memo**.
+1. Go to [Firebase Console](https://console.firebase.google.com/) -> Select **rcd-system**.
 2. Navigate to **Authentication** -> **Sign-in method**.
 3. Enable **Email/Password** sign-in provider.
 4. Go to **Authentication** -> **Settings** -> **Authorized domains**.
@@ -33,7 +33,7 @@
 2. Ensure the database is created in **Production mode**.
 3. Deploy the updated `firestore.rules` using Firebase CLI:
    ```bash
-   npx -y firebase-tools deploy --only firestore:rules --project incoming-outgoing-memo
+   npx -y firebase-tools deploy --only firestore:rules --project rcd-system
    ```
    *Or manually copy the contents of `firestore.rules` into **Firestore Database -> Rules** in the Firebase Console and click **Publish**.*
 

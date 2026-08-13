@@ -6,9 +6,9 @@
 
 // Target Google Drive Storage Folder URL provided by User
 const TARGET_GOOGLE_DRIVE_FOLDER = "https://drive.google.com/drive/folders/1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh?usp=sharing";
-const TARGET_RCD_GOOGLE_SHEET = "https://docs.google.com/spreadsheets/d/166VH0J3B0kY9MBvP37x9NtV32Vsk_y0kDqfQrutRcxA/edit?gid=767216694#gid=767216694";
-const TARGET_RCD_GOOGLE_SHEET_CSV = "https://docs.google.com/spreadsheets/d/166VH0J3B0kY9MBvP37x9NtV32Vsk_y0kDqfQrutRcxA/gviz/tq?tqx=out:csv&gid=767216694";
-const DEFAULT_GOOGLE_DRIVE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvhr0U3IWOhOLYLdWZFSRL-Q8otNf4gTPSkBgsD82CrNPJ9xowvuMsUgFLSNAsvAPIUg/exec";
+const TARGET_RCD_GOOGLE_SHEET = "https://docs.google.com/spreadsheets/d/18GuL5EwafykdUrTBmQKBdQfMIv1BDtios5K-xHjTG1k/edit?gid=2125212604#gid=2125212604";
+const TARGET_RCD_GOOGLE_SHEET_CSV = "https://docs.google.com/spreadsheets/d/18GuL5EwafykdUrTBmQKBdQfMIv1BDtios5K-xHjTG1k/gviz/tq?tqx=out:csv&gid=2125212604";
+const DEFAULT_GOOGLE_DRIVE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxpRqR02DdjkHG07lSxfofyjXsvO-rnfYAv_InZl5GvmcqWzwmgW-F-lVVWP5ZNzh-J8g/exec";
 
 class MemoMonitoringApp {
   constructor() {
@@ -33,98 +33,99 @@ class MemoMonitoringApp {
     this.renderTable();
   }
 
-  initFirebase() {
-    if (typeof firebase === "undefined") return;
+  renderApp() {
+    this.populateOfficeFilter();
+    this.renderStats();
+    this.renderTable();
+  }
 
+  async loadLanServerMemos() {
     try {
-      if (!firebase.apps.length) {
-        firebase.initializeApp(APP_CONFIG.FIREBASE);
-      }
-      this.db = firebase.firestore();
-
-      if (window.authManager) {
-        window.authManager.init(firebase.app());
-        window.authManager.onAuthStateChanged((user, profile) => {
-          if (user && profile) {
-            this.listenFirebaseSync();
-          } else {
-            this.stopFirebaseSync();
+      const resp = await fetch("/api/memos?t=" + Date.now(), { cache: "no-store" });
+      if (resp.ok) {
+        const lanMemos = await resp.json();
+        if (Array.isArray(lanMemos)) {
+          const localMap = new Map();
+          if (Array.isArray(this.memos)) {
+            this.memos.forEach(m => {
+              if (m && m.id) localMap.set(String(m.id).trim().toUpperCase(), m);
+            });
           }
+
+          const mergedMemos = lanMemos.map(m => {
+            if (!m || !m.id) return m;
+            const k = String(m.id).trim().toUpperCase();
+            const local = localMap.get(k);
+            if (local) {
+              return {
+                ...m,
+                driveLink: m.driveLink || local.driveLink || "",
+                fileData: m.fileData || local.fileData || "",
+                fileName: m.fileName || local.fileName || ""
+              };
+            }
+            return m;
+          });
+
+          if (JSON.stringify(mergedMemos) !== JSON.stringify(this.memos)) {
+            this.memos = mergedMemos;
+            if (window.storageManager) {
+              window.storageManager.saveLocalMemos(this.memos);
+            }
+            this.renderApp();
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("LAN server fetch notice:", e);
+    }
+  }
+
+  initFirebase() {
+    try {
+      const cfg = window.APP_CONFIG?.FIREBASE;
+      if (!cfg || !cfg.apiKey || cfg.apiKey.startsWith("REPLACE_WITH_")) {
+        this.updateCloudStatusIndicator("disconnected", "Firebase not configured");
+        if (window.authManager) window.authManager.init(null);
+        return;
+      }
+
+      const firebaseApp = firebase.apps.length ? firebase.app() : firebase.initializeApp(cfg);
+      this.db = firebase.firestore();
+      if (window.authManager) {
+        window.authManager.init(firebaseApp);
+        window.authManager.onAuthStateChanged((user) => {
+          if (user) this.listenFirebaseSync();
         });
       }
-
-      if (window.auditManager) window.auditManager.init(this.db);
-    } catch (e) {
-      console.warn("Firebase Cloud Database notice:", e);
+    } catch (err) {
+      console.error("Firebase initialization error:", err);
+      this.updateCloudStatusIndicator("disconnected", "Firebase error");
+      if (window.authManager) window.authManager.init(null);
     }
   }
 
   stopFirebaseSync() {
-    if (this.firestoreUnsubscribe) {
-      try { this.firestoreUnsubscribe(); } catch (e) {}
-      this.firestoreUnsubscribe = null;
+    if (this.firebaseUnsubscribe) {
+      this.firebaseUnsubscribe();
+      this.firebaseUnsubscribe = null;
     }
-    this.updateCloudStatusIndicator("disconnected", "Signed Out");
   }
 
   listenFirebaseSync() {
     if (!this.db || !window.authManager?.currentUser) return;
     this.stopFirebaseSync();
-
-    try {
-      this.updateCloudStatusIndicator("connecting", "Connecting...");
-
-      this.firestoreUnsubscribe = this.db.collection("memos").onSnapshot((snapshot) => {
-        if (!snapshot) return;
-
-        const isFromCache = snapshot.metadata?.fromCache;
-        if (isFromCache) {
-          this.updateCloudStatusIndicator("offline", "Offline Mode (Cached)");
-        } else {
-          this.updateCloudStatusIndicator("connected", "Cloud Connected");
-        }
-
-        let updated = false;
-        snapshot.docChanges().forEach((change) => {
-          const remoteMemo = change.doc.data();
-          if (remoteMemo && remoteMemo.id) {
-            const memoId = String(remoteMemo.id);
-            const normalized = window.storageManager ? window.storageManager.normalizeMemo(remoteMemo) : remoteMemo;
-
-            if (change.type === "added" || change.type === "modified") {
-              const idx = this.memos.findIndex(m => String(m.id) === memoId);
-              if (idx >= 0) {
-                this.memos[idx] = { ...this.memos[idx], ...normalized };
-              } else {
-                this.memos.unshift(normalized);
-              }
-              updated = true;
-            } else if (change.type === "removed") {
-              this.memos = this.memos.filter(m => String(m.id) !== memoId);
-              updated = true;
-            }
-          }
-        });
-
-        if (updated) {
-          if (window.storageManager) window.storageManager.saveLocalMemos(this.memos);
-          this.populateOfficeFilter();
-          this.renderStats();
-          this.renderTable();
-        }
-      }, (err) => {
-        console.error("Firebase Snapshot Listener Error:", err);
-        if (err.code === "permission-denied") {
-          this.updateCloudStatusIndicator("disconnected", "Permission Denied");
-          if (window.uiManager) window.uiManager.showToast("⚠️ Firestore Permission Denied. Active user profile required.", "error");
-        } else {
-          this.updateCloudStatusIndicator("offline", "Offline Mode");
-        }
-      });
-    } catch (e) {
-      console.warn("Firebase sync notice:", e);
-      this.updateCloudStatusIndicator("disconnected", "Connection Error");
-    }
+    this.updateCloudStatusIndicator("connecting", "Firebase syncing");
+    this.firebaseUnsubscribe = this.db.collection("memos").onSnapshot((snapshot) => {
+      const cloudMemos = snapshot.docs.map(doc => window.storageManager ? window.storageManager.normalizeMemo(doc.data()) : doc.data());
+      this.memos = cloudMemos;
+      if (window.storageManager) window.storageManager.saveLocalMemos(this.memos);
+      this.renderApp();
+      this.updateCloudStatusIndicator("connected", "Firebase connected");
+    }, (err) => {
+      console.error("Firestore listener error:", err);
+      this.updateCloudStatusIndicator("disconnected", "Firebase unavailable");
+    });
   }
 
   updateCloudStatusIndicator(status, label) {
@@ -145,64 +146,70 @@ class MemoMonitoringApp {
   }
 
   async saveMemoToCloud(memo) {
-    if (!this.db || !window.authManager?.currentUser) {
-      if (window.uiManager) window.uiManager.showToast("⚠️ Cloud database disconnected. User not logged in.", "error");
-      return false;
-    }
-
     const norm = window.storageManager ? window.storageManager.normalizeMemo(memo) : { ...memo };
-    const user = window.authManager.currentUser;
-    const profile = window.authManager.currentProfile;
+    const profile = window.authManager?.currentProfile;
+    norm.updatedByUid = window.authManager?.currentUser?.uid || "";
+    norm.updatedByName = profile?.displayName || profile?.email || "Authorized User";
 
-    norm.updatedByUid = user.uid;
-    norm.updatedByName = profile?.displayName || user.email || "Authorized User";
-    if (typeof firebase !== "undefined" && firebase.firestore?.FieldValue) {
-      norm.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
-      if (!norm.createdByUid) {
-        norm.createdByUid = user.uid;
-        norm.createdByName = profile?.displayName || user.email || "Authorized User";
-        norm.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    if (this.db && window.authManager?.currentUser) {
+      try {
+        await this.db.collection("memos").doc(String(norm.id)).set(norm, { merge: true });
+        if (window.uiManager) window.uiManager.showToast(`☁️ Saved "${norm.id}" to Firebase.`, "success");
+        return true;
+      } catch (err) {
+        console.error("Firestore save error:", err);
+        if (window.uiManager) window.uiManager.showToast(`⚠️ Firebase save failed: ${err.message}`, "error");
+        return false;
       }
     }
 
-    if (norm.fileData && norm.fileData.length > 500000) {
-      delete norm.fileData;
-    }
-
-    try {
-      const docRef = this.db.collection("memos").doc(String(norm.id));
-      await docRef.set(norm, { merge: true });
-      if (window.uiManager) window.uiManager.showToast(`☁️ Saved "${norm.id}" to cloud!`, "success");
-      return true;
-    } catch (err) {
-      console.error("Firestore write error for memo", norm.id, err);
-      const errMsg = err.code === "permission-denied"
-        ? "Permission Denied: Missing or insufficient permissions to write record."
-        : `Not saved—cloud connection failed: ${err.message || "Unknown error"}`;
-      if (window.uiManager) window.uiManager.showToast(`⚠️ ${errMsg}`, "error");
-      return false;
-    }
+    if (window.uiManager) window.uiManager.showToast(`⚠️ Not connected to Firebase. "${norm.id}" is only local.`, "error");
+    return false;
   }
 
   async deleteMemoFromCloud(memoId) {
-    if (!this.db || !window.authManager?.currentUser) {
-      if (window.uiManager) window.uiManager.showToast("⚠️ Cloud database disconnected.", "error");
-      return false;
+    let cloudDeleted = false;
+
+    // 1. Delete from Firebase Firestore if connected
+    if (this.db && window.authManager?.currentUser) {
+      try {
+        const docRef = this.db.collection("memos").doc(String(memoId));
+        await docRef.delete();
+        cloudDeleted = true;
+        console.log(`Deleted record "${memoId}" from Firebase Firestore.`);
+      } catch (err) {
+        console.warn("Firestore delete error for memo", memoId, err);
+      }
     }
 
-    try {
-      const docRef = this.db.collection("memos").doc(String(memoId));
-      await docRef.delete();
-      if (window.uiManager) window.uiManager.showToast(`🗑️ Deleted "${memoId}" from cloud!`, "info");
-      return true;
-    } catch (err) {
-      console.error("Firestore delete error for memo", memoId, err);
-      const errMsg = err.code === "permission-denied"
-        ? "Permission Denied: Only administrators can delete records."
-        : `Cloud delete failed: ${err.message || "Unknown error"}`;
-      if (window.uiManager) window.uiManager.showToast(`⚠️ ${errMsg}`, "error");
-      return false;
+    // 2. Direct Deletion to Google Sheet via Google Apps Script integration
+    const scriptUrl = window.APP_CONFIG?.GOOGLE_APPS_SCRIPT_URL;
+    if (scriptUrl) {
+      try {
+        const queryUrl = `${scriptUrl}?action=deleteMemo&id=${encodeURIComponent(memoId)}`;
+        fetch(queryUrl, { mode: "no-cors" }).catch(() => {});
+        await fetch(scriptUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "deleteMemo", id: memoId })
+        });
+        cloudDeleted = true;
+        console.log(`Sent direct deletion request for record "${memoId}" to Google Sheet.`);
+      } catch (e) {
+        console.warn("Google Sheet direct deletion notice:", e);
+      }
     }
+
+    // 3. Delete from local server API if running on LAN/Node server
+    try {
+      await fetch(`/api/memos/${encodeURIComponent(memoId)}`, { method: "DELETE" });
+    } catch (e) {
+      // Ignore local server fetch error
+    }
+
+    // Always allow local deletion (this.memos & localStorage) to complete cleanly
+    return true;
   }
 
   async syncAllDataToFirebase() {
@@ -211,14 +218,9 @@ class MemoMonitoringApp {
       return;
     }
 
-    if (!window.authManager.hasRole(APP_CONFIG.ROLES.ADMIN)) {
-      if (window.uiManager) window.uiManager.showToast("⚠️ Admin permission required for bulk data import.", "error");
-      return;
-    }
-
     try {
       const seed = this.getInitialMemos();
-      const memosToSync = (this.memos && this.memos.length >= seed.length) ? this.memos : seed;
+      const memosToSync = (this.memos && Array.isArray(this.memos)) ? this.memos : seed;
       let count = 0;
 
       for (let i = 0; i < memosToSync.length; i += 400) {
@@ -228,9 +230,6 @@ class MemoMonitoringApp {
         chunk.forEach(memo => {
           if (memo && memo.id) {
             const cleanMemo = window.storageManager ? window.storageManager.normalizeMemo(memo) : { ...memo };
-            if (cleanMemo.fileData && cleanMemo.fileData.length > 500000) {
-              delete cleanMemo.fileData;
-            }
             Object.keys(cleanMemo).forEach(key => {
               if (cleanMemo[key] === undefined) cleanMemo[key] = "";
             });
@@ -262,18 +261,14 @@ class MemoMonitoringApp {
   }
 
   loadMemos() {
-    let memos = [];
+    const seed = this.getInitialMemos();
     if (window.storageManager) {
       const raw = window.storageManager.loadLocalMemos();
-      if (Array.isArray(raw) && raw.length > 0) {
-        memos = raw.map(m => window.storageManager.normalizeMemo(m));
+      if (Array.isArray(raw)) {
+        return raw.map(m => window.storageManager.normalizeMemo(m));
       }
     }
-    const seed = this.getInitialMemos();
-    if (!memos || memos.length < seed.length) {
-      memos = seed;
-    }
-    return memos;
+    return seed;
   }
 
   saveMemos() {
@@ -315,7 +310,8 @@ class MemoMonitoringApp {
     this.searchInput = document.getElementById("search-input");
     this.officeFilter = document.getElementById("office-filter");
     this.statusFilter = document.getElementById("status-filter");
-    this.sortOrderSelect = document.getElementById("sort-order");
+    this.sortOrderSelect = document.getElementById("sort-filter") || document.getElementById("sort-order");
+    this.currentSortOrder = this.sortOrderSelect ? this.sortOrderSelect.value : "NEWEST";
     this.tableBody = document.getElementById("memo-table-body");
     this.tableCountEl = document.getElementById("table-count-label");
 
@@ -417,8 +413,9 @@ class MemoMonitoringApp {
       });
     }
 
-    if (this.sortOrderSelect) {
-      this.sortOrderSelect.addEventListener("change", (e) => {
+    const sortSelectEl = document.getElementById("sort-filter") || document.getElementById("sort-order");
+    if (sortSelectEl) {
+      sortSelectEl.addEventListener("change", (e) => {
         this.currentSortOrder = e.target.value;
         this.renderTable();
       });
@@ -595,6 +592,40 @@ class MemoMonitoringApp {
     });
   }
 
+  openAdminLoginModal() {
+    this.closeAllModals();
+    const modal = document.getElementById("auth-login-modal");
+    if (modal) {
+      modal.classList.add("active");
+      modal.style.setProperty("display", "flex", "important");
+    }
+  }
+
+  async handleAdminLoginSubmit(pendingDeleteId = null) {
+    const passInput = document.getElementById("admin-pass-input");
+    const password = passInput ? passInput.value : "";
+    const errorEl = document.getElementById("admin-login-error-msg");
+
+    if (errorEl) errorEl.style.display = "none";
+
+    if (window.authManager) {
+      const res = await window.authManager.loginAsAdmin(password);
+      if (res.success) {
+        this.closeAllModals();
+        if (pendingDeleteId) {
+          this.permanentlyDeleteMemo(pendingDeleteId);
+        } else {
+          this.openRecycleBinModal();
+        }
+      } else {
+        if (errorEl) {
+          errorEl.textContent = res.error || "Invalid Admin password.";
+          errorEl.style.display = "block";
+        }
+      }
+    }
+  }
+
   openChangeCredentialsModal() {
     this.closeAllModals();
     const modal = document.getElementById("change-credentials-modal");
@@ -662,19 +693,20 @@ class MemoMonitoringApp {
   }
 
   renderStats() {
-    this.statTotal.textContent = this.memos.length;
+    const activeMemos = Array.isArray(this.memos) ? this.memos.filter(m => m.isDeleted !== true) : [];
+    this.statTotal.textContent = activeMemos.length;
 
-    const pendingRcd = this.memos.filter(m => !(m.remarksStatus === "Transmitted to" || (m.transmittedOffice && m.transmittedOffice.trim().length > 2))).length;
+    const pendingRcd = activeMemos.filter(m => !(m.remarksStatus === "Transmitted to" || (m.transmittedOffice && m.transmittedOffice.trim().length > 2))).length;
     if (this.statPendingRcd) this.statPendingRcd.textContent = pendingRcd;
 
-    const transmitted = this.memos.filter(m => m.remarksStatus === "Transmitted to" || (m.transmittedOffice && m.transmittedOffice.trim().length > 2)).length;
+    const transmitted = activeMemos.filter(m => m.remarksStatus === "Transmitted to" || (m.transmittedOffice && m.transmittedOffice.trim().length > 2)).length;
     if (this.statTransmitted) this.statTransmitted.textContent = transmitted;
 
-    const concurred = this.memos.filter(m => m.remarksStatus.includes("Concur") || m.remarksStatus.includes("Approved") || m.remarksStatus.includes("Signed")).length;
-    this.statConcurred.textContent = concurred;
+    const concurred = activeMemos.filter(m => m.remarksStatus.includes("Concur") || m.remarksStatus.includes("Approved") || m.remarksStatus.includes("Signed")).length;
+    if (this.statConcurred) this.statConcurred.textContent = concurred;
 
-    const driveDocs = this.memos.filter(m => m.driveLink && m.driveLink.length > 5).length;
-    this.statDrive.textContent = driveDocs;
+    const driveDocs = activeMemos.filter(m => m.driveLink && m.driveLink.length > 5).length;
+    if (this.statDrive) this.statDrive.textContent = driveDocs;
   }
 
   filterType(type) {
@@ -729,18 +761,63 @@ class MemoMonitoringApp {
       return true;
     });
 
-    // Sort Order
-    filtered.sort((a, b) => {
-      const dateA = new Date(a.dateLogged).getTime() || 0;
-      const dateB = new Date(b.dateLogged).getTime() || 0;
-      const numA = parseInt(String(a.id).replace(/\D/g, '')) || 0;
-      const numB = parseInt(String(b.id).replace(/\D/g, '')) || 0;
+    // Robust Date & Time Timestamp Parsing for Sorting
+    const getMemoTimestamp = (m) => {
+      if (!m) return 0;
+      const dStr = m.dateLogged ? String(m.dateLogged).trim() : "";
+      const tStr = m.time ? String(m.time).trim() : "";
 
-      if (this.currentSortOrder === "OLDEST") {
-        if (dateA !== dateB) return dateA - dateB;
+      let year = 1970, month = 0, day = 1;
+      let hours = 0, minutes = 0;
+
+      // Parse Date (M/D/YYYY)
+      const dParts = dStr.split('/');
+      if (dParts.length === 3) {
+        month = parseInt(dParts[0], 10) - 1;
+        day = parseInt(dParts[1], 10);
+        year = parseInt(dParts[2], 10);
+      } else {
+        const dObj = new Date(dStr);
+        if (!isNaN(dObj.getTime())) {
+          year = dObj.getFullYear();
+          month = dObj.getMonth();
+          day = dObj.getDate();
+        }
+      }
+
+      // Parse Time (e.g. "08:25 AM", "7:53 AM", "12:00 PM")
+      if (tStr) {
+        const timeMatch = tStr.match(/(\d{1,2}):(\d{2})(?:\s*([AP]M))?/i);
+        if (timeMatch) {
+          hours = parseInt(timeMatch[1], 10);
+          minutes = parseInt(timeMatch[2], 10);
+          const ampm = timeMatch[3] ? timeMatch[3].toUpperCase() : "";
+
+          if (ampm === "PM" && hours < 12) hours += 12;
+          if (ampm === "AM" && hours === 12) hours = 0;
+        }
+      }
+
+      const fullDate = new Date(year, month, day, hours, minutes, 0, 0);
+      return !isNaN(fullDate.getTime()) ? fullDate.getTime() : 0;
+    };
+
+    // Sort Order (LATEST vs OLDEST)
+    const currentSort = this.currentSortOrder || (this.sortOrderSelect ? this.sortOrderSelect.value : "NEWEST");
+    filtered.sort((a, b) => {
+      const timeA = getMemoTimestamp(a);
+      const timeB = getMemoTimestamp(b);
+
+      if (currentSort === "OLDEST") {
+        if (timeA !== timeB) return timeA - timeB;
+        const numA = parseInt(String(a.id).replace(/\D/g, '')) || 0;
+        const numB = parseInt(String(b.id).replace(/\D/g, '')) || 0;
         return numA - numB;
       } else {
-        if (dateB !== dateA) return dateB - dateA;
+        // LATEST (Default - newest date & exact time at the very top!)
+        if (timeA !== timeB) return timeB - timeA;
+        const numA = parseInt(String(a.id).replace(/\D/g, '')) || 0;
+        const numB = parseInt(String(b.id).replace(/\D/g, '')) || 0;
         return numB - numA;
       }
     });
@@ -772,7 +849,7 @@ class MemoMonitoringApp {
       if (isTransmittedOut) {
         statusBadgeHtml = `<span class="badge-status status-transmitted">🟢 Transmitted</span>`;
       } else if (isConcurredOrApproved) {
-        statusBadgeHtml = `<span class="badge-status status-concurred">🔵 Concurred</span>`;
+        statusBadgeHtml = `<span class="badge-status status-concurred">🔵 For Concur / Approval</span>`;
       } else {
         statusBadgeHtml = `<span class="badge-status status-pending">🔴 Inside RCD</span>`;
       }
@@ -784,46 +861,46 @@ class MemoMonitoringApp {
         <td style="text-align:center;"><input type="checkbox" class="memo-checkbox" data-id="${memo.id}" ${this.selectedMemoIds.has(memo.id) ? 'checked' : ''} /></td>
         <td class="cell-date">${memo.dateLogged}</td>
         <td class="cell-time">${memo.time}</td>
-        <td><strong>${memo.receivedBy}</strong></td>
+        <td style="font-size:0.78rem;"><strong>${memo.receivedBy}</strong></td>
         <td><span class="cell-badge badge-office">${memo.originatingOffice}</span></td>
         <td class="subject-cell">
           <span class="subject-title">${memo.subject}</span>
           <span class="subject-meta">Ref ID: ${memo.id} | ${memo.pages || 1} Page(s)</span>
           ${agingHtml}
         </td>
-        <td><span style="font-weight:700;">${memo.actionRequired}</span></td>
+        <td style="font-size:0.78rem;"><span style="font-weight:700;">${memo.actionRequired}</span></td>
         <td>
-          <div style="display:flex; flex-direction:column; gap:3px;">
+          <div style="display:flex; flex-direction:column; gap:2px;">
             ${statusBadgeHtml}
-            <small style="font-weight:600; color:#475569; font-size:0.75rem;">${memo.remarksStatus}</small>
+            <small style="font-weight:600; color:#475569; font-size:0.72rem; line-height:1.2;">${memo.remarksStatus}</small>
           </div>
         </td>
-        <td><strong>${memo.transmittedOffice || 'Pending Release'}</strong></td>
+        <td style="font-size:0.78rem;"><strong>${memo.transmittedOffice || 'Pending Release'}</strong></td>
         <td class="cell-date">${memo.dateReceived || memo.dateLogged}</td>
-        <td>
-          <div style="display:flex; flex-direction:column; gap:4px;">
+        <td style="text-align:center;">
+          <div style="display:flex; flex-direction:column; gap:3px; align-items:center;">
             ${memo.fileData || memo.fileName ? `
-              <button class="btn btn-primary btn-sm" onclick="app.viewAttachedFile('${memo.id}')" style="padding:4px 8px; font-size:0.75rem; justify-content:center;" title="Click to View Uploaded Document File">
-                ${memo.fileName && memo.fileName.toLowerCase().endsWith('.pdf') ? '📄 View PDF File' : '🖼️ View Attached File'}
+              <button class="btn btn-primary btn-sm" onclick="app.viewAttachedFile('${memo.id}')" style="padding:2px 5px; font-size:0.7rem; justify-content:center; width:100%;" title="Click to View Uploaded Document File">
+                ${memo.fileName && memo.fileName.toLowerCase().endsWith('.pdf') ? '📄 PDF' : '🖼️ File'}
               </button>
             ` : ''}
             ${memo.driveLink ? `
-              <a href="${memo.driveLink}" target="_blank" class="drive-link-btn" style="font-size:0.72rem; padding:2px 6px;" title="Open Target Google Drive Folder">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                <span>Google Drive Folder ↗</span>
+              <a href="${memo.driveLink}" target="_blank" class="drive-link-btn" style="font-size:0.7rem; padding:2px 4px; width:100%; justify-content:center;" title="Open Target Google Drive Folder">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                <span>Drive ↗</span>
               </a>
             ` : ''}
-            ${!memo.fileData && !memo.fileName && !memo.driveLink ? '<span style="color:#94a3b8; font-style:italic;">No File</span>' : ''}
+            ${!memo.fileData && !memo.fileName && !memo.driveLink ? '<span style="color:#94a3b8; font-style:italic; font-size:0.7rem;">No File</span>' : ''}
           </div>
-          <div class="table-actions" style="margin-top:4px;">
+          <div class="table-actions" style="margin-top:3px; justify-content:center;">
             <button class="icon-btn" onclick="app.printRoutingSlip('${memo.id}')" title="Print Routing Slip">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
             </button>
             <button class="icon-btn" onclick="app.editMemo('${memo.id}')" title="Edit Record / Update Status">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
             </button>
             <button class="icon-btn danger" onclick="app.deleteMemo('${memo.id}')" title="Delete Record">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
             </button>
           </div>
         </td>
@@ -1300,9 +1377,14 @@ class MemoMonitoringApp {
     let journalMemos = [];
     if (Array.isArray(this.memos)) {
       journalMemos = this.memos.filter(m => {
-        if (!m) return false;
+        if (!m || m.isDeleted === true) return false;
         return (m.dateLogged === selectedDateSlash || m.dateReceived === selectedDateSlash);
       });
+    }
+
+    // Fallback to active filtered table memos if date match yields no results
+    if ((!journalMemos || journalMemos.length === 0) && Array.isArray(this.currentFilteredMemos)) {
+      journalMemos = this.currentFilteredMemos.filter(m => m && m.isDeleted !== true);
     }
 
     const hasMemos = journalMemos && journalMemos.length > 0;
@@ -1605,46 +1687,60 @@ class MemoMonitoringApp {
     this.saveMemos();
     this.closeAllModals();
 
-    // Non-blocking background Google Drive Upload
-    const scriptUrl = localStorage.getItem("RCD_DRIVE_SCRIPT_URL") || DEFAULT_GOOGLE_DRIVE_SCRIPT_URL;
-    if (this.currentUploadedFileData && scriptUrl) {
-      const uploadData = this.currentUploadedFileData;
-      const uploadFileName = fileNameVal;
-      const memoId = id;
-
+    // Background Google Drive & Google Sheets Sync
+    const scriptUrl = localStorage.getItem("RCD_DRIVE_SCRIPT_URL") || APP_CONFIG.GOOGLE_APPS_SCRIPT_URL;
+    if (scriptUrl) {
       setTimeout(async () => {
         try {
-          const parts = uploadData.split(',');
-          const mimeMatch = parts[0].match(/:(.*?);/);
-          const mime = mimeMatch ? mimeMatch[1] : "application/pdf";
-          const base64Data = parts[1];
-
-          const payload = {
-            fileName: `${memoId}_${uploadFileName || 'memo.pdf'}`,
-            contentType: mime,
-            base64: base64Data
-          };
-
-          const resp = await fetch(scriptUrl, {
-            method: "POST",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(payload),
-            redirect: "follow"
-          });
-
-          if (resp.ok) {
-            const resJson = await resp.json();
-            if (resJson.fileUrl) {
-              const targetMemo = this.memos.find(m => String(m.id) === String(memoId));
-              if (targetMemo) {
-                targetMemo.driveLink = resJson.fileUrl;
-                await this.saveMemoToCloud(targetMemo);
-                this.saveMemos();
+          // 1. Append Memo Entry to Google Sheet ONLY for NEW memos
+          if (existingIdx < 0) {
+            const sheetPayload = {
+              action: "appendMemo",
+              memo: {
+                id: cleanMemo.id,
+                dateLogged: cleanMemo.dateLogged,
+                time: cleanMemo.time,
+                receivedBy: cleanMemo.receivedBy,
+                originatingOffice: cleanMemo.originatingOffice,
+                subject: cleanMemo.subject,
+                actionRequired: cleanMemo.actionRequired,
+                remarksStatus: cleanMemo.remarksStatus,
+                transmittedOffice: cleanMemo.transmittedOffice,
+                dateReceived: cleanMemo.dateReceived,
+                driveLink: cleanMemo.driveLink
               }
-            }
+            };
+            fetch(scriptUrl, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(sheetPayload)
+            });
+          }
+
+          // 2. Upload PDF / JPG / PNG File to Google Drive Folder
+          if (this.currentUploadedFileData) {
+            const uploadData = this.currentUploadedFileData;
+            const parts = uploadData.split(',');
+            const mimeMatch = parts[0].match(/:(.*?);/);
+            const mime = mimeMatch ? mimeMatch[1] : "application/pdf";
+            const base64Data = parts[1];
+
+            const drivePayload = {
+              filename: `${id}_${fileNameVal}`,
+              mimeType: mime,
+              fileData: base64Data
+            };
+
+            fetch(scriptUrl, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(drivePayload)
+            });
           }
         } catch (err) {
-          console.warn("Background Google Drive upload notice:", err);
+          console.warn("Background Google sync notice:", err);
         }
       }, 50);
     }
@@ -1675,7 +1771,7 @@ class MemoMonitoringApp {
 
     if (!bodyEl) return;
 
-    // 1. If base64 fileData exists, render directly inside iframe
+    // 1. If user-uploaded base64 fileData exists, render directly inside iframe
     if (memo.fileData) {
       let fileUrl = memo.fileData;
       try {
@@ -1707,92 +1803,35 @@ class MemoMonitoringApp {
       return;
     }
 
-    // 2. If Google Drive file link exists (e.g. /file/d/FILE_ID/), embed the direct PDF preview iframe
-    if (memo.driveLink && memo.driveLink.includes("/file/d/")) {
-      const match = memo.driveLink.match(/\/file\/d\/([^\/]+)/);
-      if (match && match[1]) {
-        const embedUrl = `https://drive.google.com/file/d/${match[1]}/preview`;
+    // 2. If Google Drive file link exists (supports both /file/d/FILE_ID and open?id=FILE_ID format), embed direct original PDF preview
+    if (memo.driveLink) {
+      const match = memo.driveLink.match(/(?:open\?id=|\/file\/d\/)([a-zA-Z0-9_-]+)/);
+      if (match && match[1] && !memo.driveLink.includes("/folders/")) {
+        const fileId = match[1];
+        const embedUrl = `https://drive.google.com/file/d/${fileId}/preview`;
         bodyEl.innerHTML = `<iframe src="${embedUrl}" style="width:100%; height:100%; border:none; background:#ffffff;" allow="autoplay" title="PDF Drive Embedded Viewer"></iframe>`;
         if (modal) modal.classList.add("active");
         return;
       }
     }
 
-    // 3. Render Official PNP Memorandum PDF Document View right inside the modal
-    const isTransmitted = memo.remarksStatus === "Transmitted to" || (memo.transmittedOffice && memo.transmittedOffice.trim().length > 2);
-    const isConcurred = memo.remarksStatus.includes("Concur") || memo.remarksStatus.includes("Approved") || memo.remarksStatus.includes("Signed");
-    const statusBadge = isTransmitted ? "🟢 TRANSMITTED OUTSIDE RCD" : (isConcurred ? "🔵 CONCURRED / APPROVED" : "🔴 INSIDE RCD (PENDING)");
-
+    // 3. If NO user-uploaded PDF file exists: DO NOT create/generate synthetic PDF documents!
     bodyEl.innerHTML = `
-      <div style="width:100%; height:100%; overflow-y:auto; background:#f8fafc; padding:30px; display:flex; justify-content:center;">
-        <div style="background:#ffffff; width:100%; max-width:760px; min-height:900px; padding:40px 50px; box-shadow:0 10px 25px rgba(0,0,0,0.3); border:1px solid #cbd5e1; position:relative; font-family:'Inter', sans-serif; color:#0f172a;">
-          
-          <!-- Official PNP Header -->
-          <div style="text-align:center; border-bottom:2px solid #0f172a; padding-bottom:15px; margin-bottom:20px;">
-            <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:8px;">
-              <img src="assets/pnp_badge.png" style="height:55px; width:auto;" alt="PNP Badge" />
-              <img src="assets/pro4a_logo.png" style="height:55px; width:auto;" alt="PRO4A Logo" />
-              <img src="assets/rcd_logo.png" style="height:55px; width:auto;" alt="RCD Logo" />
-            </div>
-            <div style="font-size:0.8rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#475569;">Republic of the Philippines • Department of the Interior and Local Government</div>
-            <div style="font-size:0.95rem; font-weight:900; color:#0f2347; text-transform:uppercase; margin-top:2px;">PHILIPPINE NATIONAL POLICE • POLICE REGIONAL OFFICE 4A</div>
-            <div style="font-size:1.1rem; font-weight:900; color:#1e3a8a; margin-top:2px;">OFFICE OF THE REGIONAL COMPTROLLERSHIP DIVISION</div>
-            <div style="font-size:0.75rem; color:#64748b; font-style:italic;">Camp BGen Vicente P Lim, Calamba City, Laguna</div>
-          </div>
-
-          <!-- Official Document Stamps & Status -->
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px;">
-            <div style="background:#0f172a; color:#ffffff; padding:6px 14px; border-radius:6px; font-weight:800; font-size:0.85rem;">
-              REF CONTROL NO: <span style="color:#38bdf8;">${memo.id}</span>
-            </div>
-            <div style="border:2px solid ${isTransmitted ? '#16a34a' : '#0284c7'}; color:${isTransmitted ? '#15803d' : '#0369a1'}; padding:6px 12px; border-radius:6px; font-weight:900; font-size:0.8rem; text-transform:uppercase;">
-              ${statusBadge}
-            </div>
-          </div>
-
-          <!-- MEMORANDUM DOCUMENT CONTENT -->
-          <div style="font-size:1.15rem; font-weight:900; text-decoration:underline; letter-spacing:1px; margin-bottom:20px; text-align:center; color:#0f172a;">
-            MEMORANDUM
-          </div>
-
-          <div style="display:grid; grid-template-columns: 140px 1fr; row-gap:12px; font-size:0.92rem; margin-bottom:25px; border-bottom:1px dashed #cbd5e1; padding-bottom:20px;">
-            <div style="font-weight:800; color:#475569;">FOR / TO:</div>
-            <div style="font-weight:700; color:#0f172a;">Regional Director / Division Chief, RCD PRO 4A</div>
-
-            <div style="font-weight:800; color:#475569;">FROM:</div>
-            <div style="font-weight:700; color:#1e3a8a;">${memo.originatingOffice} (Originating Division)</div>
-
-            <div style="font-weight:800; color:#475569;">SUBJECT:</div>
-            <div style="font-weight:800; color:#0f2347; font-size:1.05rem; line-height:1.4;">${memo.subject}</div>
-
-            <div style="font-weight:800; color:#475569;">DATE LOGGED:</div>
-            <div>${memo.dateLogged} ${memo.time}</div>
-
-            <div style="font-weight:800; color:#475569;">ACTION REQUIRED:</div>
-            <div><span style="background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:4px; font-weight:800; font-size:0.82rem;">${memo.actionRequired}</span></div>
-
-            <div style="font-weight:800; color:#475569;">REMARKS / STATUS:</div>
-            <div style="font-weight:700; color:#1e293b;">${memo.remarksStatus} ${memo.transmittedOffice ? ' (' + memo.transmittedOffice + ')' : ''}</div>
-          </div>
-
-          <div style="font-size:0.88rem; color:#334155; line-height:1.6; margin-bottom:30px;">
-            <p style="margin-bottom:12px;">1. Reference: Official RCD Memorandum Document Record logged under System Control ID <strong>${memo.id}</strong>.</p>
-            <p style="margin-bottom:12px;">2. This document record was officially registered by <strong>${memo.receivedBy || 'Duty PNCO'}</strong> and assigned for <strong>${memo.actionRequired}</strong>.</p>
-            <p>3. For info, guidance, and strict compliance.</p>
-          </div>
-
-          <!-- Document Footer Signature Block -->
-          <div style="margin-top:60px; display:flex; justify-content:space-between; align-items:flex-end;">
-            <div style="font-size:0.75rem; color:#64748b;">
-              <div>Document Verification Code: RCD-${memo.id}-PRO4A</div>
-              <div>System Authenticated Record</div>
-            </div>
-            <div style="text-align:center;">
-              <div style="font-weight:800; font-size:0.9rem; color:#0f2347;">CHIEF, RCD PRO 4A</div>
-              <div style="font-size:0.75rem; color:#64748b;">Regional Comptrollership Division</div>
-            </div>
-          </div>
-
+      <div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#f8fafc; padding:40px; text-align:center; color:#334155; font-family:'Inter', sans-serif;">
+        <div style="font-size:3.5rem; margin-bottom:12px;">📁</div>
+        <h3 style="font-size:1.25rem; font-weight:800; color:#0f172a; margin-bottom:8px;">No User-Uploaded PDF File Found</h3>
+        <p style="max-width:480px; font-size:0.9rem; color:#64748b; margin-bottom:20px; line-height:1.5;">
+          No original PDF document file was uploaded for control reference <strong>${memo.id}</strong>. Only original PDF files uploaded by users are displayed.
+        </p>
+        <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
+          <button class="btn btn-primary" onclick="app.editMemo('${memo.id}')">
+            <span>✏️ Upload PDF File for this Memo</span>
+          </button>
+          ${memo.driveLink ? `
+            <a href="${memo.driveLink}" target="_blank" class="btn btn-outline" style="text-decoration:none;">
+              <span>Google Drive Link ↗</span>
+            </a>
+          ` : ''}
         </div>
       </div>
     `;
@@ -1807,15 +1846,10 @@ class MemoMonitoringApp {
     }
   }
 
-  deleteMemo(id) {
-    if (confirm(`Are you sure you want to delete Memorandum Record ${id}?`)) {
-      this.memos = this.memos.filter(m => m.id !== id);
-      this.saveMemos();
-    }
-  }
+
 
   printRoutingSlip(id) {
-    const memo = this.memos.find(m => m.id === id);
+    const memo = this.memos.find(m => String(m.id) === String(id) && m.isDeleted !== true);
     if (!memo) return;
 
     this.selectedMemoForPrint = memo;
@@ -1903,7 +1937,7 @@ class MemoMonitoringApp {
 
   batchExportExcel() {
     if (this.selectedMemoIds.size === 0) return;
-    const selectedMemos = this.memos.filter(m => this.selectedMemoIds.has(m.id));
+    const selectedMemos = this.memos.filter(m => this.selectedMemoIds.has(m.id) && m.isDeleted !== true);
     if (typeof XLSX === "undefined") {
       alert("Excel export engine is loading. Please try exporting again.");
       return;
@@ -1997,15 +2031,33 @@ class MemoMonitoringApp {
     latestMemos = latestMemos.filter(m => !m.isDeleted);
 
     // 2. Fetch template workbook from data folder
-    const templatePath = "data/PRO4A_RCD_Memo_Logbook_2026-08-04.xlsx";
-    let workbook;
-    try {
-      const resp = await fetch(templatePath);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status} ${resp.statusText}`);
-      const arrayBuffer = await resp.arrayBuffer();
-      workbook = XLSX.read(arrayBuffer, { type: "array", cellStyles: true, cellFormulas: true, cellDates: true, cellNF: true });
-    } catch (fetchErr) {
-      console.warn("Could not load template workbook from data folder, generating fallback workbook:", fetchErr);
+    const templateCandidates = [
+      "data/PRO4A_RCD_Memo_Logbook_2026-08-04.xlsx",
+      "./data/PRO4A_RCD_Memo_Logbook_2026-08-04.xlsx",
+      "/data/PRO4A_RCD_Memo_Logbook_2026-08-04.xlsx"
+    ];
+    let workbook = null;
+    let loadedPath = null;
+
+    for (const pathCandidate of templateCandidates) {
+      try {
+        const resp = await fetch(pathCandidate);
+        if (resp.ok) {
+          const arrayBuffer = await resp.arrayBuffer();
+          workbook = XLSX.read(arrayBuffer, { type: "array", cellStyles: true, cellFormulas: true, cellDates: true, cellNF: true });
+          loadedPath = pathCandidate;
+          break;
+        }
+      } catch (err) {
+        // Try next candidate path
+      }
+    }
+
+    if (!workbook) {
+      console.warn("Could not load template workbook from server data folder, generating formatted fallback workbook.");
+      if (window.uiManager) {
+        window.uiManager.showToast("⚠️ Note: Template file 'data/PRO4A_RCD_Memo_Logbook_2026-08-04.xlsx' was not found on server. Ensure the data folder is uploaded to GitHub.", "info");
+      }
       workbook = XLSX.utils.book_new();
     }
 
@@ -2134,6 +2186,178 @@ class MemoMonitoringApp {
     if (window.uiManager) window.uiManager.showToast(`📊 Successfully exported ${latestMemos.length} records to ${fileName}`, "success");
   }
 
+  openExcelImportFile() {
+    let input = document.getElementById("excel-import-file-input");
+    if (!input) {
+      input = document.createElement("input");
+      input.type = "file";
+      input.id = "excel-import-file-input";
+      input.accept = ".xlsx,.xls,.csv";
+      input.style.display = "none";
+      document.body.appendChild(input);
+    }
+    input.onchange = (e) => this.handleExcelImportFile(e);
+    input.value = "";
+    input.click();
+  }
+
+  async handleExcelImportFile(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    if (window.uiManager) {
+      window.uiManager.showToast(`⏳ Reading and parsing "${file.name}"... Please wait.`, "info");
+    }
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+
+      let sheetName = "Memo Logbook";
+      if (!workbook.Sheets[sheetName]) {
+        sheetName = workbook.SheetNames[0];
+      }
+      const worksheet = workbook.Sheets[sheetName];
+      if (!worksheet) {
+        throw new Error("No worksheets found in uploaded file.");
+      }
+
+      // Convert sheet to Array of Arrays (100% reliable format)
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      if (!rows || rows.length <= 1) {
+        throw new Error("The uploaded Excel file has no data rows.");
+      }
+
+      console.log(`Parsed ${rows.length} total rows from file ${file.name}`);
+
+      // Existing records map for deduplication
+      const existingMap = new Map();
+      (this.memos || []).forEach(m => {
+        if (m && m.id) {
+          existingMap.set(String(m.id).trim().toUpperCase(), m);
+        }
+      });
+
+      const importedMemosMap = new Map();
+      let newCount = 0;
+      let updatedCount = 0;
+
+      rows.forEach((row, idx) => {
+        if (idx === 0) return; // Skip header row
+        if (!row || row.length === 0) return;
+
+        // Index 1 is Column B (Control Ref ID)
+        let memoId = row[1] ? String(row[1]).trim() : "";
+        if (!memoId || memoId.toLowerCase().includes("control ref id") || memoId.toLowerCase().includes("control no")) {
+          return; // Skip header or empty rows
+        }
+
+        const dateLogged = row[2] ? String(row[2]).trim() : "8/4/2026";
+        const time = row[3] ? String(row[3]).trim() : "8:00:00 AM";
+        const receivedBy = row[4] ? String(row[4]).trim() : "Duty PNCO";
+        const originatingOffice = row[5] ? String(row[5]).trim() : "ROD";
+        const subject = row[6] ? String(row[6]).trim() : "Untitled Memorandum";
+        const actionRequired = row[7] ? String(row[7]).trim() : "For Info";
+        const remarksStatus = row[8] ? String(row[8]).trim() : "Received";
+        const transmittedOffice = (row[9] && String(row[9]).trim() !== "Pending Release") ? String(row[9]).trim() : "";
+        const dateReceived = row[10] ? String(row[10]).trim() : dateLogged;
+        const driveLink = row[12] ? String(row[12]).trim() : "";
+
+        let computedWorkflowStatus = "RECEIVED";
+        if (remarksStatus === "Transmitted to" || (transmittedOffice && transmittedOffice.length > 2)) {
+          computedWorkflowStatus = "TRANSMITTED";
+        } else if (remarksStatus.includes("Concur") || remarksStatus.includes("Approved") || remarksStatus.includes("Signed")) {
+          computedWorkflowStatus = "APPROVED";
+        }
+
+        const memoKey = memoId.toUpperCase();
+        const memoObj = {
+          id: memoId,
+          dateLogged: dateLogged,
+          time: time,
+          receivedBy: receivedBy,
+          originatingOffice: originatingOffice,
+          subject: subject,
+          actionRequired: actionRequired,
+          remarksStatus: remarksStatus,
+          transmittedOffice: transmittedOffice,
+          dateReceived: dateReceived,
+          driveLink: driveLink,
+          pages: 1,
+          memoType: memoId.startsWith("ORCD") ? "OUTGOING" : "INCOMING",
+          workflowStatus: computedWorkflowStatus,
+          priority: "NORMAL",
+          assignedSection: "RCD",
+          schemaVersion: 2,
+          isDeleted: false
+        };
+
+        if (existingMap.has(memoKey)) {
+          updatedCount++;
+        } else {
+          newCount++;
+        }
+
+        importedMemosMap.set(memoKey, memoObj);
+      });
+
+      const uniqueImportedMemos = Array.from(importedMemosMap.values());
+
+      if (uniqueImportedMemos.length === 0) {
+        throw new Error("No valid, non-header memorandum records found in the uploaded file.");
+      }
+
+      // 1. Sync to Cloud Firestore (deduplicated by Document ID)
+      if (this.db) {
+        if (window.uiManager) {
+          window.uiManager.showToast(`☁️ Syncing ${uniqueImportedMemos.length} records to Cloud Firestore...`, "info");
+        }
+        for (let i = 0; i < uniqueImportedMemos.length; i += 400) {
+          const chunk = uniqueImportedMemos.slice(i, i + 400);
+          const batch = this.db.batch();
+          chunk.forEach(m => {
+            const cleanMemo = window.storageManager ? window.storageManager.normalizeMemo(m) : { ...m };
+            const docRef = this.db.collection("memos").doc(String(cleanMemo.id));
+            batch.set(docRef, cleanMemo, { merge: true });
+          });
+          await batch.commit();
+        }
+      }
+
+      // 2. Merge into local memory state without duplicates
+      const mergedMap = new Map();
+      (this.memos || []).forEach(m => {
+        if (m && m.id) mergedMap.set(String(m.id).trim().toUpperCase(), m);
+      });
+      uniqueImportedMemos.forEach(m => {
+        const k = String(m.id).trim().toUpperCase();
+        if (mergedMap.has(k)) {
+          mergedMap.set(k, { ...mergedMap.get(k), ...m });
+        } else {
+          mergedMap.set(k, m);
+        }
+      });
+
+      this.memos = Array.from(mergedMap.values());
+
+      if (window.storageManager) {
+        window.storageManager.saveLocalMemos(this.memos);
+      }
+
+      this.renderApp();
+
+      if (window.uiManager) {
+        window.uiManager.showToast(`🎉 Imported ${uniqueImportedMemos.length} memos! (${newCount} new, ${updatedCount} updated, 0 duplicates)`, "success");
+      }
+
+    } catch (err) {
+      console.error("Excel import error:", err);
+      if (window.uiManager) {
+        window.uiManager.showToast(`❌ Import error: ${err.message || "Invalid Excel file"}`, "error");
+      }
+    }
+  }
+
   exportToCSV() {
     let csv = "Control ID,Date Logged,Time,Received By,Originating Office,Subject,Action Required,Remarks/Status,Transmitted Office,Date Received,Google Drive Link\n";
     this.memos.forEach(m => {
@@ -2175,14 +2399,35 @@ class MemoMonitoringApp {
   }
 
   deleteMemo(id) {
-    const memo = this.memos.find(m => m.id === id);
+    const memo = this.memos.find(m => String(m.id) === String(id));
     if (!memo) return;
 
-    this.closeAllModals();
     const modal = document.getElementById("soft-delete-modal");
-    document.getElementById("delete-memo-id").value = id;
-    document.getElementById("delete-reason-input").value = "";
-    if (modal) modal.classList.add("active");
+    const idInput = document.getElementById("delete-memo-id");
+    const reasonInput = document.getElementById("delete-reason-input");
+
+    if (modal && idInput && reasonInput) {
+      this.closeAllModals();
+      idInput.value = id;
+      reasonInput.value = "";
+      modal.classList.add("active");
+    } else {
+      const reason = prompt(`Are you sure you want to delete Memorandum Record ${id}?\n\nPlease enter reason for deletion:`, "Record soft-deleted");
+      if (reason !== null && reason.trim().length > 0) {
+        memo.isDeleted = true;
+        memo.deletedAt = new Date().toISOString();
+        memo.deletedByUid = window.authManager?.currentUser?.uid || "duty_officer";
+        memo.deleteReason = reason.trim();
+        this.saveMemoToCloud(memo).then(() => {
+          this.saveMemos();
+          if (window.uiManager) window.uiManager.showToast(`🗑️ Record ${id} moved to Recycle Bin`, "info");
+        });
+      }
+    }
+  }
+
+  confirmSoftDeleteMemo(id) {
+    this.deleteMemo(id);
   }
 
   async handleSoftDeleteSubmit(e) {
@@ -2221,7 +2466,26 @@ class MemoMonitoringApp {
     this.closeAllModals();
     const modal = document.getElementById("recycle-bin-modal");
     const tbody = document.getElementById("recycle-bin-table-body");
+    const statusBanner = document.getElementById("recycle-bin-admin-status");
     const deletedMemos = this.memos.filter(m => m.isDeleted === true);
+    const isAdmin = window.authManager?.canDelete();
+
+    if (statusBanner) {
+      if (isAdmin) {
+        statusBanner.innerHTML = `
+          <div style="background: rgba(22, 163, 74, 0.12); border: 1px solid #86efac; color: #166534; padding: 10px 14px; border-radius: 8px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; font-size: 0.84rem;">
+            <span>👑 <strong>ADMIN ACCESS UNLOCKED:</strong> You have full permission to restore or permanently erase records.</span>
+            <span style="font-size: 0.75rem; background: #16a34a; color: white; padding: 2px 8px; border-radius: 12px; font-weight: 800;">ACTIVE ADMIN</span>
+          </div>
+        `;
+      } else {
+        statusBanner.innerHTML = `
+          <div style="background: rgba(217, 119, 6, 0.12); border: 1px solid #fcd34d; color: #92400e; padding: 10px 14px; border-radius: 8px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.84rem;">
+            <span>🔒 <strong>RESTRICTED ACCESS:</strong> Permanent deletion is limited to Firebase users whose Firestore profile has the <code>admin</code> role.</span>
+          </div>
+        `;
+      }
+    }
 
     if (tbody) {
       tbody.innerHTML = "";
@@ -2281,22 +2545,124 @@ class MemoMonitoringApp {
 
   async permanentlyDeleteMemo(id) {
     if (!window.authManager?.canDelete()) {
-      alert("Permission Denied: Only administrators can permanently delete records.");
+      alert("Permission Denied: permanent deletion requires an authenticated Firebase admin account.");
       return;
     }
-    if (confirm(`PERMANENT DELETION WARNING:\nAre you sure you want to permanently erase record ${id}? This action CANNOT be undone.`)) {
-      const cloudSuccess = await this.deleteMemoFromCloud(id);
-      if (cloudSuccess) {
-        this.memos = this.memos.filter(m => String(m.id) !== String(id));
-        this.saveMemos();
-        this.openRecycleBinModal();
 
-        if (window.auditManager) {
-          window.auditManager.logAction(id, "PERMANENT_DELETE", {}, `Permanently deleted record ${id} from system`);
+    if (confirm(`PERMANENT DELETION WARNING:\nAre you sure you want to permanently erase record ${id}? This action CANNOT be undone.`)) {
+      const baseId = String(id).replace(/-\d+$/, '');
+      const cloudSuccess = await this.deleteMemoFromCloud(id);
+      await this.deleteMemoFromCloud(baseId);
+
+      const targetUpper = String(id).trim().toUpperCase();
+      const baseUpper = baseId.trim().toUpperCase();
+
+      this.memos = this.memos.filter(m => {
+        if (!m || !m.id) return false;
+        const k = String(m.id).trim().toUpperCase();
+        return k !== targetUpper && k !== baseUpper;
+      });
+      this.saveMemos();
+      this.openRecycleBinModal();
+
+      if (window.auditManager) {
+        window.auditManager.logAction(id, "PERMANENT_DELETE", {}, `Permanently deleted record ${id} from system`);
+      }
+      if (window.uiManager) {
+        window.uiManager.showToast(`❌ Permanently erased record ${id}`, "error");
+      }
+    }
+  }
+
+  async emptyRecycleBin() {
+    const deletedMemos = this.memos.filter(m => m.isDeleted === true);
+    if (deletedMemos.length === 0) {
+      if (window.uiManager) window.uiManager.showToast("Recycle Bin is already empty.", "info");
+      return;
+    }
+
+    if (!window.authManager?.canDelete()) {
+      alert("Permission Denied: permanent deletion requires an authenticated Firebase admin account.");
+      return;
+    }
+
+    if (confirm(`⚠️ DANGER: PERMANENTLY ERASE ALL ITEMS?\n\nAre you sure you want to permanently delete ALL ${deletedMemos.length} items from the Recycle Bin?\n\nThis action CANNOT be undone and will update Google Sheets & Cloud storage.`)) {
+      const rawIds = deletedMemos.map(m => String(m.id));
+      const baseIds = deletedMemos.map(m => String(m.id).replace(/-\d+$/, ''));
+      const idsToDelete = Array.from(new Set([...rawIds, ...baseIds]));
+
+      // 1. Send batch DELETE to LAN Node server API
+      try {
+        await fetch("/api/memos", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: idsToDelete })
+        });
+      } catch (e) {
+        console.warn("LAN server batch delete error notice:", e);
+      }
+
+      // 2. Send batch DELETE to Google Apps Script (Google Sheets)
+      const scriptUrl = window.APP_CONFIG?.GOOGLE_APPS_SCRIPT_URL;
+      if (scriptUrl) {
+        try {
+          const queryUrl = `${scriptUrl}?action=emptyRecycleBin&ids=${encodeURIComponent(idsToDelete.join(","))}`;
+          fetch(queryUrl, { mode: "no-cors" }).catch(() => {});
+          await fetch(scriptUrl, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "emptyRecycleBin", ids: idsToDelete })
+          });
+        } catch (e) {
+          console.warn("Google Sheet batch delete notice:", e);
         }
-        if (window.uiManager) {
-          window.uiManager.showToast(`❌ Permanently erased record ${id}`, "error");
-        }
+      }
+
+      // 3. Delete each item from Firestore / cloud fallback
+      for (const id of idsToDelete) {
+        await this.deleteMemoFromCloud(id);
+      }
+
+      // 4. Permanently remove items from local memory & localStorage
+      const deleteSet = new Set(idsToDelete.map(id => id.trim().toUpperCase()));
+      this.memos = this.memos.filter(m => m && m.id && !deleteSet.has(String(m.id).trim().toUpperCase()));
+      this.saveMemos();
+      this.openRecycleBinModal();
+
+      if (window.auditManager) {
+        window.auditManager.logAction("RECYCLE_BIN", "EMPTY_BIN", { count: idsToDelete.length }, `Permanently emptied ${idsToDelete.length} records from Recycle Bin`);
+      }
+      if (window.uiManager) {
+        window.uiManager.showToast(`🗑️ Permanently erased ${idsToDelete.length} records from Recycle Bin`, "error");
+      }
+    }
+  }
+
+  async restoreAllMemos() {
+    const deletedMemos = this.memos.filter(m => m.isDeleted === true);
+    if (deletedMemos.length === 0) {
+      if (window.uiManager) window.uiManager.showToast("No deleted items to restore.", "info");
+      return;
+    }
+
+    if (confirm(`Restore all ${deletedMemos.length} deleted records back to active logbook?`)) {
+      for (const memo of deletedMemos) {
+        memo.isDeleted = false;
+        memo.deletedAt = "";
+        memo.deletedByUid = "";
+        memo.deleteReason = "";
+        await this.saveMemoToCloud(memo);
+      }
+
+      this.saveMemos();
+      this.openRecycleBinModal();
+
+      if (window.auditManager) {
+        window.auditManager.logAction("RECYCLE_BIN", "RESTORE_ALL", { count: deletedMemos.length }, `Restored ${deletedMemos.length} records from Recycle Bin`);
+      }
+      if (window.uiManager) {
+        window.uiManager.showToast(`✅ Restored ${deletedMemos.length} records back to active logbook!`, "success");
       }
     }
   }
@@ -2310,6 +2676,27 @@ function initApp() {
     window.app = app;
   }
 }
+
+window.openExcelImportFile = function() {
+  if (!window.app) initApp();
+  let input = document.getElementById("excel-import-file-input");
+  if (!input) {
+    input = document.createElement("input");
+    input.type = "file";
+    input.id = "excel-import-file-input";
+    input.accept = ".xlsx,.xls,.csv";
+    input.style.display = "none";
+    document.body.appendChild(input);
+  }
+  input.onchange = function(e) {
+    if (!window.app) initApp();
+    if (window.app) {
+      window.app.handleExcelImportFile(e);
+    }
+  };
+  input.value = "";
+  input.click();
+};
 
 window.openDutyJournalDirect = function() {
   if (!window.app) initApp();

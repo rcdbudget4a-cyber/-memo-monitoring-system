@@ -48,22 +48,11 @@
         </div>
       </div>
       <div class="header-actions">
-        <div id="cloud-status-badge" style="display:inline-flex; align-items:center; gap:6px; background:rgba(15, 23, 42, 0.6); padding:4px 10px; border-radius:8px; border:1px solid #334155; font-size:0.75rem; font-weight:800; color:#e2e8f0; margin-right:8px;" title="Firebase Cloud Database Status">
-          <span id="cloud-status-dot" style="height:8px; width:8px; border-radius:50%; background-color:#ef4444; display:inline-block;"></span>
-          <span id="cloud-status-text">Connecting...</span>
+        <div id="cloud-status-badge" style="display:none !important;">
+          <span id="cloud-status-dot"></span>
+          <span id="cloud-status-text"></span>
         </div>
-        <div id="auth-user-badge" style="display:none; align-items:center; gap:10px; background:rgba(255,255,255,0.12); padding:4px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.25);">
-          <div style="display:flex; flex-direction:column; text-align:right;">
-            <span id="auth-user-name" style="font-size:0.82rem; font-weight:800; color:#ffffff;">Officer Name</span>
-            <span id="auth-user-role" style="font-size:0.68rem; font-weight:800; color:#f59e0b; text-transform:uppercase;">RECORDS_ADMIN</span>
-          </div>
-          <button class="btn btn-outline btn-sm" onclick="if(window.app){ window.app.openChangeCredentialsModal(); }" style="padding:4px 10px; font-size:0.75rem; color:#60a5fa; border-color:#60a5fa; font-weight:700;" title="Change Officer Password">
-            <span>🔐 Change Password</span>
-          </button>
-          <button class="btn btn-outline btn-sm" onclick="window.authManager.logout()" style="padding:4px 10px; font-size:0.75rem; color:#fca5a5; border-color:#fca5a5; font-weight:700;" title="Lock System Immediately">
-            <span>🔒 Sign Out</span>
-          </button>
-        </div>
+        <div id="auth-user-badge"></div>
         <div class="time-badge" id="live-clock">
           Loading clock...
         </div>
@@ -100,11 +89,11 @@
         </div>
       </div>
 
-      <div class="stat-card navy" id="card-filter-concurred" style="cursor: pointer;" title="Filter Blue Badges: Concurred / Approved Memos">
+      <div class="stat-card navy" id="card-filter-concurred" style="cursor: pointer;" title="Filter Blue Badges: For Concur / For Approval Memos">
         <div class="stat-icon">✅</div>
         <div class="stat-info">
           <div class="stat-value" id="stat-concurred">0</div>
-          <div class="stat-label">CONCURRED / APPROVED</div>
+          <div class="stat-label">FOR CONCUR / FOR APPROVAL</div>
         </div>
       </div>
 
@@ -143,7 +132,7 @@
           <option value="ALL">All Remarks / Status</option>
           <option value="PENDING_RCD">🔴 Light Red: Inside RCD (Pending Release)</option>
           <option value="TRANSMITTED">🟢 Light Green: Transmitted (Released Out of RCD)</option>
-          <option value="CONCURRED">🔵 Blue Badge: Concurred / Approved</option>
+          <option value="CONCURRED">🔵 Blue Badge: For Concur / For Approval</option>
         </select>
 
         <select id="sort-filter" class="filter-select" style="font-weight: 700; color: #1e3a8a; background: #eff6ff; border-color: #93c5fd;">
@@ -173,12 +162,6 @@
           <span>Export to Excel (.xlsx)</span>
         </button>
 
-        <button class="btn btn-primary" id="btn-import-excel" onclick="window.openExcelImportFile()" style="background: linear-gradient(135deg, #059669 0%, #047857 100%); border-color: #047857; color: white;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          <span>📥 Import Logbook (.xlsx)</span>
-        </button>
-        <input type="file" id="excel-import-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="if(window.app){ window.app.handleExcelImportFile(event); }" />
-
         <button class="btn btn-journal" id="btn-print-journal" onclick="window.openDutyJournalDirect();">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
           <span>Print Duty Journal</span>
@@ -203,7 +186,7 @@
           🟢 <strong>Light Green Row:</strong> Transmitted (Released Out of RCD)
         </span>
         <span style="background:#eff6ff; color:#1e40af; padding:4px 10px; border-radius:6px; border:1px solid #93c5fd;">
-          🔵 <strong>Blue Badge:</strong> Concurred / Approved Status
+          🔵 <strong>Blue Badge:</strong> For Concur / For Approval
         </span>
       </div>
     </div>
@@ -231,17 +214,17 @@
         <table class="memo-table">
           <thead>
             <tr>
-              <th style="width:36px; text-align:center;"><input type="checkbox" id="select-all-memos" title="Select All Memos" /></th>
-              <th>Date Logged/Received</th>
-              <th>Time</th>
-              <th>Input/Received By</th>
-              <th>Originating Office</th>
-              <th style="min-width: 280px;">Subject / Title of Memo</th>
-              <th>Action Required</th>
-              <th>Remarks / Status</th>
-              <th>Transmitted to what Office</th>
-              <th>DATE RECEIVED</th>
-              <th>Scanned Report/Documents</th>
+              <th style="width:30px; text-align:center;"><input type="checkbox" id="select-all-memos" title="Select All Memos" /></th>
+              <th style="width:80px;">Date Logged</th>
+              <th style="width:68px;">Time</th>
+              <th style="width:105px;">Input / Received By</th>
+              <th style="width:65px;">Office</th>
+              <th style="width:26%;">Subject / Title of Memo</th>
+              <th style="width:90px;">Action Required</th>
+              <th style="width:115px;">Remarks / Status</th>
+              <th style="width:105px;">Transmitted Office</th>
+              <th style="width:80px;">Date Received</th>
+              <th style="width:125px; text-align:center;">Actions / Scans</th>
             </tr>
           </thead>
           <tbody id="memo-table-body">
@@ -461,6 +444,7 @@
             <div class="form-group">
               <label>Remarks / Status</label>
               <select id="form-remarks" required>
+                <option value="Pending">Pending</option>
                 <option value="Transmitted to">Transmitted to</option>
                 <option value="For Concur with R6">For Concur with R6</option>
                 <option value="Approved">Approved</option>
@@ -620,8 +604,8 @@
     </div>
   </div>
 
-  <!-- SECURITY OVERLAY MODAL: System Lock & Security Login Screen -->
-  <div class="modal-overlay active" id="auth-login-modal" style="display: flex !important; z-index: 9999; background: rgba(7, 16, 33, 0.95); backdrop-filter: blur(10px);">
+  <!-- SECURITY OVERLAY MODAL: System Lock & Security Login Screen (Disabled for Standalone Local Mode) -->
+  <div class="modal-overlay" id="auth-login-modal" style="display: none !important;">
     <div class="modal-card" style="max-width: 420px; border-radius: 16px; border: 2px solid #38bdf8; box-shadow: 0 20px 50px rgba(0,0,0,0.8); background: linear-gradient(180deg, #0b1d3a 0%, #07152b 100%); color: white; text-align: center;">
       <div style="padding: 28px 24px 14px 24px;">
         <div style="display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 14px;">
@@ -664,6 +648,54 @@
 
         <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 18px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
           Authorized RCD Personnel Only • Protected Security Gate
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Legacy local admin modal disabled in cloud deployment -->
+  <div class="modal-overlay" id="admin-login-modal">
+    <div class="modal-card" style="max-width: 440px; border-radius: 16px; border: 2px solid #f59e0b; box-shadow: 0 20px 50px rgba(0,0,0,0.8); background: linear-gradient(180deg, #1e1b4b 0%, #0f172a 100%); color: white;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%); border-radius: 14px 14px 0 0;">
+        <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <span>🔑 SYSTEM ADMINISTRATOR LOGIN</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <form id="admin-login-form" onsubmit="event.preventDefault(); window.app && window.app.handleAdminLoginSubmit();" style="padding: 24px;">
+        <div style="text-align: center; margin-bottom: 18px;">
+          <div style="font-size: 0.8rem; color: #fde68a; font-weight: 700; background: rgba(217, 119, 6, 0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.4);">
+            🛡️ High Security Gate • Permanent Record Management
+          </div>
+        </div>
+
+        <div style="margin-bottom: 14px; text-align: left;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
+            ✉️ Admin Account Email:
+          </label>
+          <input type="email" id="admin-email-input" required value="admin@pro4a.pnp.gov.ph" style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #f59e0b; background: #0f172a; color: #ffffff; text-align: center;" autocomplete="email" readonly />
+        </div>
+
+        <div style="margin-bottom: 18px; text-align: left;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
+            🔑 Administrator Password:
+          </label>
+          <input type="password" id="admin-pass-input" required placeholder="Use Firebase sign-in instead" disabled style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #f59e0b; background: #0f172a; color: #ffffff; text-align: center;" autocomplete="current-password" autofocus />
+          <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px; text-align: right;">
+            Administrator access is managed through Firebase Authentication.
+          </div>
+        </div>
+
+        <div id="admin-login-error-msg" style="display: none; padding: 10px 12px; background: rgba(220, 38, 38, 0.25); border: 1px solid #fca5a5; color: #fca5a5; border-radius: 8px; font-size: 0.85rem; font-weight: 800; text-align: center; margin-bottom: 16px;"></div>
+
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn btn-secondary btn-cancel" style="flex: 1; padding: 12px; font-weight: 700; border-radius: 8px; background: #334155; color: white;">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-warning" style="flex: 2; padding: 12px; background: linear-gradient(135deg, #d97706 0%, #b45309 100%); border: none; font-size: 0.95rem; font-weight: 900; border-radius: 8px; justify-content: center; box-shadow: 0 4px 14px rgba(217, 119, 6, 0.4); cursor: pointer; color: white;">
+            <span>👑 Authenticate as Admin</span>
+          </button>
         </div>
       </form>
     </div>
@@ -770,6 +802,34 @@
     </div>
   </div>
 
+  <!-- MODAL: Soft Delete Reason Confirmation Modal -->
+  <div class="modal-overlay" id="soft-delete-modal">
+    <div class="modal-card" style="max-width: 500px;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: white;">
+        <div class="modal-title">
+          <span>🗑️ Confirm Record Deletion</span>
+        </div>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="soft-delete-form">
+        <div class="modal-body" style="padding: 20px;">
+          <input type="hidden" id="delete-memo-id" />
+          <p style="font-size:0.92rem; color:#334155; margin-bottom:12px; font-weight:600;">
+            Are you sure you want to delete this memorandum record? The record will be moved to the Recycle Bin.
+          </p>
+          <div class="form-group">
+            <label for="delete-reason-input" style="font-weight:700; font-size:0.85rem; color:#0f172a; display:block; margin-bottom:6px;">Reason for Deletion <span style="color:#e11d48;">*</span></label>
+            <input type="text" id="delete-reason-input" class="form-control" placeholder="e.g. Duplicate entry, Transmitted to wrong office, Obsolete" required style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:6px;" />
+          </div>
+        </div>
+        <div class="modal-footer" style="padding: 12px 20px; background:#f8fafc; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
+          <button type="button" class="btn btn-outline btn-cancel">Cancel</button>
+          <button type="submit" class="btn btn-warning" style="background:#dc2626; color:white;">Delete Record</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- MODAL: Recycle Bin Modal -->
   <div class="modal-overlay" id="recycle-bin-modal">
     <div class="modal-card" style="max-width: 850px;">
@@ -781,6 +841,7 @@
       </div>
 
       <div class="modal-body" style="padding: 15px;">
+        <div id="recycle-bin-admin-status" style="margin-bottom: 12px;"></div>
         <div class="table-responsive">
           <table class="memo-table">
             <thead>
@@ -800,7 +861,15 @@
         </div>
       </div>
 
-      <div class="modal-footer">
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-success btn-sm" onclick="if(window.app){ window.app.restoreAllMemos(); }" style="padding: 6px 14px; font-weight: 800; display: flex; align-items: center; gap: 6px; background: #16a34a; color: white;" title="Restore all soft-deleted records back to logbook">
+            <span>🔄 Restore All Memos</span>
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="if(window.app){ window.app.emptyRecycleBin(); }" style="padding: 6px 14px; font-weight: 800; display: flex; align-items: center; gap: 6px; background: #dc2626; color: white;" title="Permanently erase all deleted records in Recycle Bin">
+            <span>🗑️ Empty Recycle Bin</span>
+          </button>
+        </div>
         <button type="button" class="btn btn-outline btn-cancel">Close</button>
       </div>
     </div>
@@ -820,8 +889,6 @@
   <script src="js/aging.js?v=2.0"></script>
   <script src="js/ui.js?v=2.0"></script>
 
-  <!-- Full Google Sheets Dataset (1,210 Records) -->
-  <script src="js/memos_data.js?v=12.0"></script>
   <!-- Application Logic -->
   <script src="js/app.js?v=12.0"></script>
 </body>

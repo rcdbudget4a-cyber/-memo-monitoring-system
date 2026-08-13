@@ -19,9 +19,9 @@ class StorageManager {
     const seed = this.loadInitialMemos();
     try {
       const saved = localStorage.getItem(this.LOCAL_KEY);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= seed.length) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
@@ -33,18 +33,14 @@ class StorageManager {
 
   saveLocalMemos(memos) {
     try {
-      // Strip very large base64 fileData (>500KB) to prevent QuotaExceededError
-      const cleanMemos = memos.map(m => {
-        const copy = { ...m };
-        if (copy.fileData && copy.fileData.length > 500000) {
-          delete copy.fileData;
-        }
-        return copy;
-      });
-      localStorage.setItem(this.LOCAL_KEY, JSON.stringify(cleanMemos));
+      localStorage.setItem(this.LOCAL_KEY, JSON.stringify(memos));
     } catch (e) {
-      console.warn("LocalStorage save error", e);
+      console.warn("LocalStorage quota notice, preserving in-memory DB", e);
     }
+  }
+
+  saveMemosLocally(memos) {
+    return this.saveLocalMemos(memos);
   }
 
   normalizeMemo(memo) {

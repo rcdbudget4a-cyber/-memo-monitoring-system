@@ -18,32 +18,37 @@ class AuthManager {
   }
 
   init(firebaseApp) {
-    if (typeof firebase === "undefined" || !firebaseApp) return;
+    if (!firebaseApp || typeof firebase === "undefined") {
+      this.currentUser = null;
+      this.currentProfile = null;
+      this.updateAuthUI(false, "Firebase is not configured.");
+      return;
+    }
 
     this.auth = firebase.auth();
     this.db = firebase.firestore();
 
-    // Firebase Auth State Listener
     this.auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        const profile = await this.fetchUserProfile(user.uid);
-        if (this.isProfileActive(profile)) {
-          this.currentUser = user;
-          this.currentProfile = profile;
-          this.updateAuthUI(true);
-        } else {
-          console.warn("User authenticated in Firebase Auth, but missing active Firestore user profile:", user.uid);
-          await this.auth.signOut();
-          this.currentUser = null;
-          this.currentProfile = null;
-          this.updateAuthUI(false, "Access Denied: Account lacks an active Firestore user profile. Contact system administrator.");
-        }
-      } else {
+      if (!user) {
         this.currentUser = null;
         this.currentProfile = null;
         this.updateAuthUI(false);
+        this.notifyAuthListeners();
+        return;
       }
 
+      const profile = await this.fetchUserProfile(user.uid);
+      if (!this.isProfileActive(profile)) {
+        this.currentUser = null;
+        this.currentProfile = null;
+        this.updateAuthUI(false, "Access denied: authorized user profile not found or inactive.");
+        try { await this.auth.signOut(); } catch (_) {}
+        return;
+      }
+
+      this.currentUser = user;
+      this.currentProfile = profile;
+      this.updateAuthUI(true);
       this.notifyAuthListeners();
     });
   }
@@ -209,36 +214,49 @@ class AuthManager {
     return this.hasRole(APP_CONFIG.ROLES.ADMIN);
   }
 
+  async loginAsAdmin() {
+    return { success: false, error: "Admin access uses Firebase Authentication. Sign in with an authorized admin account." };
+  }
+
+  switchRoleToDutyPnco() {
+    if (window.uiManager) window.uiManager.showToast("Use your Firebase account role to change access level.", "info");
+  }
+
   updateAuthUI(isAuthenticated, errorMessage = "") {
     const loginModal = document.getElementById("auth-login-modal");
     const userBadge = document.getElementById("auth-user-badge");
-    const userNameEl = document.getElementById("auth-user-name");
-    const userRoleEl = document.getElementById("auth-user-role");
-    const passInput = document.getElementById("auth-pass-input");
-    const errorEl = document.getElementById("auth-error-msg");
 
-    if (isAuthenticated) {
-      if (loginModal) {
+    if (loginModal) {
+      if (isAuthenticated) {
         loginModal.classList.remove("active");
         loginModal.style.setProperty("display", "none", "important");
-      }
-      if (userBadge) userBadge.style.display = "flex";
-      if (userNameEl) userNameEl.textContent = this.currentProfile?.displayName || this.currentUser?.email || "Authorized User";
-      if (userRoleEl) userRoleEl.textContent = (this.userRole || "USER").toUpperCase();
-    } else {
-      if (loginModal) {
+      } else {
         loginModal.classList.add("active");
         loginModal.style.setProperty("display", "flex", "important");
-      }
-      if (userBadge) userBadge.style.display = "none";
-      if (passInput) passInput.value = "";
-      if (errorEl) {
-        if (errorMessage) {
+        const errorEl = document.getElementById("auth-error-msg");
+        if (errorEl && errorMessage) {
           errorEl.textContent = errorMessage;
           errorEl.style.display = "block";
-        } else {
-          errorEl.style.display = "none";
         }
+      }
+    }
+
+    if (userBadge) {
+      if (isAuthenticated && this.currentProfile) {
+        userBadge.style.display = "flex";
+        userBadge.style.alignItems = "center";
+        userBadge.style.gap = "8px";
+        
+        const isAdmin = this.userRole === APP_CONFIG.ROLES.ADMIN;
+        userBadge.innerHTML = `
+          <div style="background: ${isAdmin ? '#7c3aed' : '#1e293b'}; color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 800; display: flex; align-items: center; gap: 6px; border: 1px solid ${isAdmin ? '#a78bfa' : '#475569'}; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+            <span>${isAdmin ? '👑 ADMIN' : '👤 DUTY PNCO'}</span>
+            <span style="opacity: 0.85; font-weight: 600; max-width: 140px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">(${this.currentProfile.displayName || 'Authorized User'})</span>
+          </div>
+          
+        `;
+      } else {
+        userBadge.style.display = "none";
       }
     }
   }
