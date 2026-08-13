@@ -630,7 +630,7 @@
           <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
             ✉️ Official Email Address:
           </label>
-          <input type="email" id="auth-email-input" required value="duty.pnco@pro4a.pnp.gov.ph" placeholder="duty.pnco@pro4a.pnp.gov.ph" style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff; text-align: center;" autocomplete="email" />
+          <input type="email" id="auth-email-input" required value="rcdbudget4a@gmail.com" placeholder="rcdbudget4a@gmail.com" style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #38bdf8; background: #0f2347; color: #ffffff; text-align: center;" autocomplete="email" />
         </div>
 
         <div style="margin-bottom: 18px; text-align: left;">
@@ -653,7 +653,7 @@
     </div>
   </div>
 
-  <!-- Legacy local admin modal disabled in cloud deployment -->
+  <!-- MODAL: Admin Login Modal (Default Password: RCD@2026) -->
   <div class="modal-overlay" id="admin-login-modal">
     <div class="modal-card" style="max-width: 440px; border-radius: 16px; border: 2px solid #f59e0b; box-shadow: 0 20px 50px rgba(0,0,0,0.8); background: linear-gradient(180deg, #1e1b4b 0%, #0f172a 100%); color: white;">
       <div class="modal-header" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%); border-radius: 14px 14px 0 0;">
@@ -679,11 +679,11 @@
 
         <div style="margin-bottom: 18px; text-align: left;">
           <label style="display: block; font-size: 0.78rem; font-weight: 800; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase;">
-            🔑 Administrator Password:
+            🔑 Password (Default: RCD@2026):
           </label>
-          <input type="password" id="admin-pass-input" required placeholder="Use Firebase sign-in instead" disabled style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #f59e0b; background: #0f172a; color: #ffffff; text-align: center;" autocomplete="current-password" autofocus />
+          <input type="password" id="admin-pass-input" required placeholder="Enter password (default: RCD@2026)" style="width: 100%; padding: 10px 14px; font-size: 0.95rem; border-radius: 8px; border: 1.5px solid #f59e0b; background: #0f172a; color: #ffffff; text-align: center;" autocomplete="current-password" autofocus />
           <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 4px; text-align: right;">
-            Administrator access is managed through Firebase Authentication.
+            Default Admin Password: <strong style="color:#fde68a;">RCD@2026</strong>
           </div>
         </div>
 
@@ -881,15 +881,15 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <!-- Modular Infrastructure Scripts -->
-  <script src="js/config.js?v=2.0"></script>
-  <script src="js/auth.js?v=2.0"></script>
-  <script src="js/storage.js?v=2.0"></script>
-  <script src="js/validation.js?v=2.0"></script>
-  <script src="js/audit.js?v=2.0"></script>
-  <script src="js/aging.js?v=2.0"></script>
-  <script src="js/ui.js?v=2.0"></script>
+  <script src="js/config.js?v=20260813-1303"></script>
+  <script src="js/auth.js?v=20260813-1303"></script>
+  <script src="js/storage.js?v=20260813-1303"></script>
+  <script src="js/validation.js?v=20260813-1303"></script>
+  <script src="js/audit.js?v=20260813-1303"></script>
+  <script src="js/aging.js?v=20260813-1303"></script>
+  <script src="js/ui.js?v=20260813-1303"></script>
 
   <!-- Application Logic -->
-  <script src="js/app.js?v=12.0"></script>
+  <script src="js/app.js?v=20260813-1303"></script>
 </body>
 </html>

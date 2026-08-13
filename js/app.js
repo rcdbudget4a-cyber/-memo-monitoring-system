@@ -367,15 +367,10 @@ class MemoMonitoringApp {
       if (authEmailInput) authEmailInput.value = customEmail;
       if (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_AUTH) window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_EMAIL = customEmail;
     }
+    // Legacy local passwords are intentionally discarded in cloud mode.
+    // Firebase Authentication is the only source of truth for passwords.
     if (customPass) {
-      const authPassInput = document.getElementById("auth-pass-input");
-      if (authPassInput) authPassInput.value = customPass;
-      if (window.APP_CONFIG && window.APP_CONFIG.DEFAULT_AUTH) {
-        window.APP_CONFIG.DEFAULT_AUTH.DEFAULT_PASSWORD = customPass;
-        if (!window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.includes(customPass)) {
-          window.APP_CONFIG.DEFAULT_AUTH.VALID_PASSCODES.push(customPass);
-        }
-      }
+      try { localStorage.removeItem("RCD_CUSTOM_AUTH_PASS"); } catch (_) {}
     }
   }
 
@@ -659,27 +654,26 @@ class MemoMonitoringApp {
       return;
     }
 
-    if (newPass.length < 4) {
-      if (window.uiManager) window.uiManager.showToast("New Password must be at least 4 characters.", "error");
+    if (newPass.length < 6) {
+      if (window.uiManager) window.uiManager.showToast("New Password must be at least 6 characters.", "error");
       return;
     }
 
-    // Verify Previous Password strictly
-    const activePass = window.authManager ? window.authManager.getCurrentPassword() : (localStorage.getItem("RCD_CUSTOM_AUTH_PASS") || "PRO4A@2026");
-    const isPrevValid = prevPass === activePass || prevPass === "PRO4A@2026";
-
-    if (!isPrevValid) {
-      if (window.uiManager) window.uiManager.showToast("⚠️ Previous Password is incorrect. Verification failed.", "error");
+    if (!window.authManager) {
+      if (window.uiManager) window.uiManager.showToast("Firebase Authentication is unavailable.", "error");
       return;
     }
 
-    if (window.authManager) {
-      await window.authManager.changePassword(prevPass, newPass);
+    const result = await window.authManager.changePassword(prevPass, newPass);
+    if (!result || !result.success) {
+      if (window.uiManager) window.uiManager.showToast(`⚠️ Password update failed: ${result?.error || "Unknown error"}`, "error");
+      return;
     }
 
+    try { localStorage.removeItem("RCD_CUSTOM_AUTH_PASS"); } catch (_) {}
     this.closeAllModals();
     if (window.uiManager) {
-      window.uiManager.showToast("✅ System Password updated & synced with Firebase!", "success");
+      window.uiManager.showToast("✅ Firebase account password updated.", "success");
     }
   }
 
@@ -2672,8 +2666,27 @@ class MemoMonitoringApp {
 let app;
 function initApp() {
   if (!app) {
-    app = new MemoMonitoringApp();
-    window.app = app;
+    try {
+      app = new MemoMonitoringApp();
+      window.app = app;
+    } catch (err) {
+      console.error("RCD application startup failed:", err);
+      const clock = document.getElementById("live-clock");
+      if (clock) {
+        clock.textContent = "App startup error";
+        clock.title = err && err.message ? err.message : "Unknown startup error";
+      }
+      const loginModal = document.getElementById("auth-login-modal");
+      const errorEl = document.getElementById("auth-error-msg");
+      if (errorEl) {
+        errorEl.textContent = "System startup error: " + (err && err.message ? err.message : "Unknown error");
+        errorEl.style.display = "block";
+      }
+      if (loginModal) {
+        loginModal.classList.add("active");
+        loginModal.style.setProperty("display", "flex", "important");
+      }
+    }
   }
 }
 
