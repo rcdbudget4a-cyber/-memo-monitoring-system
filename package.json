@@ -4,10 +4,9 @@
   "description": "Office of the Regional Comptrollership Division - Incoming/Outgoing Memorandum Monitoring System (PRO 4A)",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "npx wrangler pages dev .",
-    "deploy": "npx wrangler pages deploy . --project-name=rcd-memo-monitoring-system",
-    "build": "echo 'No build step required for static SPA site'"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "echo \"No frontend build step required\""
   },
   "keywords": [
     "pnp",
@@ -21,6 +20,6 @@
   "author": "PRO 4A RCD",
   "license": "ISC",
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "wrangler": "^4.68.0"
   }
 }

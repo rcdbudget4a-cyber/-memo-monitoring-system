@@ -110,6 +110,22 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/drive-upload") {
+      // Diagnostic GET: opening this URL in a browser should return JSON.
+      // If it returns the RCD web page instead, Cloudflare is still serving
+      // static assets without executing this Worker.
+      if (request.method === "GET") {
+        return Response.json(
+          {
+            ok: true,
+            workerRouteActive: true,
+            route: "/api/drive-upload",
+            uploadMethod: "POST",
+            driveFolderId: "1uUxq2TwM0UWKL06fIAAVMCJNjbGMg-sh"
+          },
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      }
+
       if (request.method !== "POST") {
         return Response.json(
           { ok: false, error: "Method not allowed" },

@@ -1,0 +1,51 @@
+RCD CLOUDFLARE WORKER ROUTING FIX
+=================================
+
+WHY THE UPLOAD STILL SAID "HTTP 200"
+------------------------------------
+The updated _worker.js was already in GitHub, but the Cloudflare project was
+being deployed as static assets. Therefore:
+
+  POST /api/drive-upload
+        -> static-site SPA fallback
+        -> index.html (HTTP 200)
+
+app.js expected JSON, received HTML, and displayed:
+"Google Drive upload failed (HTTP 200)."
+
+THIS PATCH FIXES THE DEPLOYMENT
+-------------------------------
+wrangler.jsonc now explicitly configures:
+
+  main: ./_worker.js
+
+and routes:
+
+  /api/* -> Worker first
+
+Static HTML/CSS/JS/images continue to use Cloudflare Static Assets.
+
+FILES TO PUT IN GITHUB
+----------------------
+1. wrangler.jsonc
+2. .assetsignore
+3. package.json
+4. _worker.js
+
+Cloudflare Workers Build settings:
+  Build command: npm run build
+  Deploy command: npx wrangler deploy
+  Root directory: /
+
+After the new deployment completes, open:
+
+https://memo-monitoring-system.rcdbudget4a.workers.dev/api/drive-upload
+
+CORRECT RESULT:
+A JSON response containing:
+  "workerRouteActive": true
+
+WRONG RESULT:
+The normal RCD Memo Monitoring System webpage.
+
+Only after the JSON diagnostic works should you test a PDF upload again.
