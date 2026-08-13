@@ -1754,10 +1754,17 @@ class MemoMonitoringApp {
         if (driveInput) driveInput.value = driveLinkValue;
 
         if (window.uiManager) {
-          window.uiManager.showToast(
-            "✅ Scan uploaded to Google Drive.",
-            "success"
-          );
+          if (uploaded.usedFolderFallback) {
+            window.uiManager.showToast(
+              "✅ Google Drive accepted the scan. Folder link saved because the upload service did not return a direct file URL.",
+              "success"
+            );
+          } else {
+            window.uiManager.showToast(
+              "✅ Scan uploaded to Google Drive.",
+              "success"
+            );
+          }
         }
       } catch (uploadErr) {
         console.error("Google Drive attachment upload error:", uploadErr);
